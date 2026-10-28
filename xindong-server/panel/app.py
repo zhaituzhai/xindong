@@ -1,126 +1,134 @@
 from __future__ import annotations
+import os
 import sys
-import json
-import httpx
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 import flet as ft
 import flet.app as ft_app
+from panel.api import Api
+from panel.pages import overview, data, leaderboard, tier, challenge, pk
 
-API = "http://127.0.0.1:8770"
-ADMIN_TOKEN = "change-me-admin-token"
-
-
-def api_get(path: str, token: str | None = None) -> dict:
-    headers = {"X-Admin-Token": ADMIN_TOKEN} if token == "admin" else ({"Authorization": f"Bearer {token}"} if token else {})
-    r = httpx.get(f"{API}{path}", headers=headers, timeout=10.0)
-    return r.json() if r.status_code == 200 else {"error": r.text}
+MENU = [
+    ("overview", "概览", ft.Icons.DASHBOARD, None),
+    ("data", "数据管理", ft.Icons.STORAGE, [
+        ("data:users", "用户管理"), ("data:ledger", "账本记录"), ("data:configs", "配置管理"),
+        ("data:snapshots", "快照管理"), ("data:friends", "好友关系"), ("data:invitations", "邀请码"),
+        ("data:webhooks", "Webhook管理"), ("data:logs", "操作日志"),
+    ]),
+    ("lb", "榜单管理", ft.Icons.LIST_ALT, [
+        ("lb:daily:positive", "日榜·正向"), ("lb:daily:negative", "日榜·反向"),
+        ("lb:weekly:positive", "周榜·正向"), ("lb:weekly:negative", "周榜·反向"),
+    ]),
+    ("tier", "段位管理", ft.Icons.EMOJI_EVENTS, [
+        ("tier:current", "当前分布"), ("tier:history", "历史结算"),
+    ]),
+    ("challenge", "挑战管理", ft.Icons.EXTENSION, [
+        ("challenge:today", "今日挑战"), ("challenge:history", "历史挑战"), ("challenge:achieved", "达成榜"),
+    ]),
+    ("pk", "PK管理", ft.Icons.COMPARE_ARROWS, [
+        ("pk:running", "进行中"), ("pk:history", "历史对局"), ("pk:white_collar", "白嫖榜"),
+    ]),
+]
 
 
 def main(page: ft.Page):
     page.title = "薪动后台管理面板"
-    page.scroll = ft.ScrollMode.AUTO
+    try:
+        page.window.width = 1280
+        page.window.height = 820
+    except Exception:
+        pass
+    page.padding = 0
 
-    content = ft.Column()
+    api = Api()
+    state = {"expanded": set(), "selected": "overview"}
 
-    def render_overview(_=None):
-        data = api_get("/api/v1/admin/overview", "admin")
+    content = ft.Column(scroll=ft.ScrollMode.AUTO, expand=True)
+    nav_col = ft.Column(scroll=ft.ScrollMode.AUTO, expand=True)
+
+    def dispatch(key: str):
         content.controls.clear()
-        content.controls.append(ft.Text("概览", size=24, weight=ft.FontWeight.BOLD))
-        if "error" in data:
-            content.controls.append(ft.Text(f"错误: {data['error']}", color=ft.Colors.RED))
-        else:
-            content.controls.append(ft.Text(f"在线用户: {data.get('online')}"))
-            content.controls.append(ft.Text(f"总用户数: {data.get('total_users')}"))
-            content.controls.append(ft.Text(f"今日上报: {data.get('today_reports')}"))
-            content.controls.append(ft.Text("段位分布:"))
-            for k, v in (data.get("tier_distribution") or {}).items():
-                content.controls.append(ft.Text(f"  {k}: {v}"))
-        page.update()
+        try:
+            if key == "overview":
+                overview.render(content, api)
+            elif key.startswith("data:"):
+                data.render_data(content, api, key.split(":", 1)[1])
+            elif key.startswith("lb:"):
+                _, scope, direction = key.split(":")
+                leaderboard.render_leaderboard(content, api, scope, direction)
+            elif key.startswith("tier:"):
+                tier.render_tier(content, api, key.split(":", 1)[1])
+            elif key.startswith("challenge:"):
+                challenge.render_challenge(content, api, key.split(":", 1)[1])
+            elif key.startswith("pk:"):
+                pk.render_pk(content, api, key.split(":", 1)[1])
+        except Exception as ex:
+            content.controls.clear()
+            content.controls.append(ft.Text(f"渲染异常: {ex}", color=ft.Colors.RED))
+        content.update()
 
-    def render_users(_=None):
-        data = api_get("/api/v1/admin/users?limit=200", "admin")
-        content.controls.clear()
-        content.controls.append(ft.Text("用户列表", size=24, weight=ft.FontWeight.BOLD))
-        users = data.get("users", []) if isinstance(data, dict) else []
-        rows = []
-        for u in users[:200]:
-            rows.append(ft.DataRow(cells=[
-                ft.DataCell(ft.Text(u.get("nickname") or "-")),
-                ft.DataCell(ft.Text(u.get("device_id", "")[:8])),
-                ft.DataCell(ft.Text(u.get("tier") or "-")),
-                ft.DataCell(ft.Text(str(u.get("tier_score") or 0)[:8])),
-                ft.DataCell(ft.Text("在线" if u.get("online") else "离线")),
-                ft.DataCell(ft.Text(u.get("last_active") or "-")),
-            ]))
-        content.controls.append(ft.DataTable(
-            columns=[ft.DataColumn(ft.Text("昵称")), ft.DataColumn(ft.Text("ID")),
-                     ft.DataColumn(ft.Text("段位")), ft.DataColumn(ft.Text("综合分")),
-                     ft.DataColumn(ft.Text("状态")), ft.DataColumn(ft.Text("最近活跃"))],
-            rows=rows,
-        ))
-        page.update()
+    def render_nav():
+        nav_col.controls.clear()
+        for top_key, label, icon, children in MENU:
+            is_sel = state["selected"] == top_key
+            is_exp = top_key in state["expanded"]
+            row = ft.Row([
+                ft.Icon(icon, color=ft.Colors.BLUE_700 if is_sel else ft.Colors.GREY_700),
+                ft.Text(label, weight=ft.FontWeight.W_600 if is_sel else ft.FontWeight.NORMAL,
+                        color=ft.Colors.BLUE_700 if is_sel else ft.Colors.BLACK),
+            ])
+            if children:
+                row.controls.append(ft.Icon(ft.Icons.EXPAND_MORE if is_exp else ft.Icons.CHEVRON_RIGHT, size=18))
 
-    def render_leaderboard(_=None):
-        content.controls.clear()
-        content.controls.append(ft.Text("日榜 - 今日已赚", size=24, weight=ft.FontWeight.BOLD))
-        data = api_get("/api/v1/leaderboard/daily?metric=normal_earned&limit=50")
-        rows = []
-        for e in data.get("entries", []):
-            rows.append(ft.DataRow(cells=[
-                ft.DataCell(ft.Text(str(e["rank"]))),
-                ft.DataCell(ft.Text(e.get("nickname") or "匿名")),
-                ft.DataCell(ft.Text(f"{e.get('diff_to_top') or 0:.2f}")),
-            ]))
-        content.controls.append(ft.DataTable(
-            columns=[ft.DataColumn(ft.Text("排名")), ft.DataColumn(ft.Text("昵称")),
-                     ft.DataColumn(ft.Text("与榜首差"))],
-            rows=rows,
-        ))
-        page.update()
+            top_btn = ft.Container(row, padding=ft.Padding(left=10, top=10, right=12, bottom=12), ink=True,
+                                   bgcolor=ft.Colors.BLUE_50 if is_sel else None, border_radius=6)
 
-    def render_tier(_=None):
-        data = api_get("/api/v1/tier/distribution")
-        content.controls.clear()
-        content.controls.append(ft.Text("段位分布", size=24, weight=ft.FontWeight.BOLD))
-        for k, v in (data.get("distribution") or {}).items():
-            content.controls.append(ft.Text(f"{k}: {v}"))
-        page.update()
+            def on_top(e, k=top_key, has_children=bool(children)):
+                if has_children:
+                    if k in state["expanded"]:
+                        state["expanded"].discard(k)
+                    else:
+                        state["expanded"].add(k)
+                    render_nav()
+                else:
+                    state["selected"] = k
+                    render_nav()
+                    dispatch(k)
 
-    def render_challenge(_=None):
-        data = api_get("/api/v1/challenge/today")
-        content.controls.clear()
-        content.controls.append(ft.Text("今日挑战", size=24, weight=ft.FontWeight.BOLD))
-        ch = data.get("challenge") or {}
-        content.controls.append(ft.Text(f"描述: {ch.get('description')}"))
-        content.controls.append(ft.Text(f"类型: {ch.get('kind')}"))
-        content.controls.append(ft.Text("达成榜:"))
-        for a in (data.get("achieved") or []):
-            content.controls.append(ft.Text(f"  {a.get('nickname') or a.get('device_id')[:8]} @ {a.get('achieved_at')}"))
-        page.update()
+            top_btn.on_click = on_top
+            nav_col.controls.append(top_btn)
 
-    def render_pk(_=None):
-        data = api_get("/api/v1/admin/pk/running", "admin")
-        content.controls.clear()
-        content.controls.append(ft.Text("进行中 PK", size=24, weight=ft.FontWeight.BOLD))
-        for s in (data.get("sessions") or []):
-            content.controls.append(ft.Text(f"{s['session_id'][:8]}... A={s['a_id'][:8]} B={s['b_id'][:8]} mode={s['mode']}"))
-        page.update()
+            if children and is_exp:
+                for ck, clabel in children:
+                    csel = state["selected"] == ck
+                    crow = ft.Container(
+                        ft.Row([ft.Icon(ft.Icons.SUBDIRECTORY_ARROW_RIGHT, size=14, color=ft.Colors.GREY_500),
+                                ft.Text(clabel, color=ft.Colors.BLUE_700 if csel else ft.Colors.BLACK)]),
+                        padding=ft.Padding(left=6, top=6, right=12, bottom=12), margin=ft.Margin(left=18, top=0, right=0, bottom=0), ink=True,
+                        bgcolor=ft.Colors.BLUE_100 if csel else None, border_radius=6)
 
-    nav = ft.NavigationBar(
-        destinations=[
-            ft.NavigationBarDestination(icon=ft.Icons.DASHBOARD, label="概览"),
-            ft.NavigationBarDestination(icon=ft.Icons.PEOPLE, label="用户"),
-            ft.NavigationBarDestination(icon=ft.Icons.LIST_ALT, label="日榜"),
-            ft.NavigationBarDestination(icon=ft.Icons.EMOJI_EVENTS, label="段位"),
-            ft.NavigationBarDestination(icon=ft.Icons.EXTENSION, label="挑战"),
-            ft.NavigationBarDestination(icon=ft.Icons.COMPARE_ARROWS, label="PK"),
-        ],
-        on_change=lambda e: [
-            render_overview, render_users, render_leaderboard,
-            render_tier, render_challenge, render_pk,
-        ][e.control.selected_index](),
+                    def on_child(e, k=ck):
+                        state["selected"] = k
+                        render_nav()
+                        dispatch(k)
+
+                    crow.on_click = on_child
+                    nav_col.controls.append(crow)
+        nav_col.update()
+
+    header = ft.Container(
+        ft.Row([ft.Icon(ft.Icons.QUERY_STATS, color=ft.Colors.WHITE), ft.Text("薪动后台管理面板", color=ft.Colors.WHITE, size=18, weight=ft.FontWeight.BOLD)]),
+        bgcolor=ft.Colors.BLUE_700, padding=14,
     )
-    render_overview()
-    page.add(nav, content)
+    left = ft.Container(
+        ft.Column([ft.Text("导航", size=14, color=ft.Colors.GREY_500, weight=ft.FontWeight.W_600), nav_col]),
+        width=240, padding=12, bgcolor=ft.Colors.GREY_100, border=ft.Border(top=ft.BorderSide(1, ft.Colors.GREY_300), bottom=ft.BorderSide(1, ft.Colors.GREY_300), left=ft.BorderSide(1, ft.Colors.GREY_300), right=ft.BorderSide(1, ft.Colors.GREY_300)),
+    )
+    right = ft.Container(content, expand=True, padding=10)
+
+    page.add(ft.Column([header, ft.Row([left, right], expand=True)], expand=True))
+    render_nav()
+    dispatch("overview")
 
 
 if __name__ == "__main__":

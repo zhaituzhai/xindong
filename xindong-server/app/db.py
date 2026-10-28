@@ -117,7 +117,31 @@ CREATE TABLE IF NOT EXISTS webhook_logs (
     attempts INTEGER DEFAULT 0,
     created_at TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS admin_logs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    ts TEXT NOT NULL,
+    action TEXT NOT NULL,
+    target TEXT,
+    detail TEXT,
+    ip TEXT
+);
 """
+
+RUN_DIR: Path | None = None
+
+
+def run_dir() -> Path:
+    global RUN_DIR
+    if RUN_DIR is not None:
+        return RUN_DIR
+    rd = storage_cfg().get("run_dir", ".xindong")
+    p = Path(rd)
+    if not p.is_absolute():
+        p = ROOT / p
+    p.mkdir(parents=True, exist_ok=True)
+    RUN_DIR = p
+    return p
 
 
 def _new_conn() -> sqlite3.Connection:
@@ -125,6 +149,7 @@ def _new_conn() -> sqlite3.Connection:
     p = Path(db_path)
     if not p.is_absolute():
         p = ROOT / p
+    p.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(str(p), check_same_thread=False, isolation_level=None)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL")

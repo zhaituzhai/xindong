@@ -291,3 +291,87 @@ xindong-server/
 5. 注销后该用户所有表无残留。
 6. 30 天后快照清理任务只保留每日末次。
 7. Flet 面板能查看所有上述数据。
+---
+
+## 13. 管理面板重构设计（v2）
+
+### 13.1 布局
+- **左右分离**：左侧 `NavigationRail`（原生支持二级 `NavigationRailDestination`），右侧内容区 `Container`。
+- 窗口宽 1200×800，左侧导航固定 240px，右侧自适应滚动。
+- 顶部标题栏显示当前一级/二级菜单路径与后台地址。
+
+### 13.2 一级菜单与二级菜单结构
+| 一级菜单 | 二级菜单 | 说明 |
+|---|---|---|
+| 概览 | （无） | 单击直接显示系统概览，不展开二级 |
+| 数据管理 | 用户管理 | 分页+按昵称/ID/段位/在线筛选+查看详情+吊销token+注销 |
+| 数据管理 | 账本记录 | 按用户/日期范围筛选分页查看 |
+| 数据管理 | 配置管理 | 按用户筛选分页查看各用户 config |
+| 数据管理 | 快照管理 | 按用户/时间范围查看历史快照时间线 |
+| 数据管理 | 好友关系 | 查看所有好友关系+解除 |
+| 数据管理 | 邀请码 | 查看邀请码使用情况 |
+| 数据管理 | Webhook管理 | 注册/查看/删除/投递日志 |
+| 榜单管理 | 日榜·正向 | 页面内下拉选指标(7个)+日期 |
+| 榜单管理 | 日榜·反向 | 页面内下拉选指标(9个)+日期 |
+| 榜单管理 | 周榜·正向 | 页面内下拉选指标(7个)+日期 |
+| 榜单管理 | 周榜·反向 | 页面内下拉选指标(9个)+日期 |
+| 段位管理 | 当前分布 | 全服段位分布+我的段位 |
+| 段位管理 | 历史结算 | 按周查看 ranks 结算记录 |
+| 挑战管理 | 今日挑战 | 今日挑战定义+达成榜 |
+| 挑战管理 | 历史挑战 | 按日期范围查看历史挑战 |
+| 挑战管理 | 达成榜 | 按挑战日期查看达成排行 |
+| PK管理 | 进行中 | 进行中对局列表 |
+| PK管理 | 历史对局 | 分页查看历史战报 |
+| PK管理 | 白嫖榜 | 老板白嫖榜 |
+
+### 13.3 概览页内容
+- 基础计数：在线用户数 / 总用户数 / 今日上报数 / 段位分布
+- 近 7 天上报趋势：每日上报量数字列表
+- 业务动态：进行中 PK 数 / 今日挑战达成数 / 本周段位结算状态
+- 系统状态：数据库大小 / 快照总数 / 最近清理时间 / 定时任务下次执行时间
+
+### 13.4 数据管理模式
+- 统一模式：顶部筛选条件栏 + 分页表格（每页 20 条）+ 行操作按钮。
+- 只读查看 + 少量管理操作（吊销 token / 注销用户 / 解除好友 / 删除 webhook），不做数据编辑。
+- 分页参数：`page`（从1起）、`page_size`（默认20）。响应含 `total`、`page`、`page_size`、`items`。
+
+### 13.5 需补充的后端 Admin API
+| 方法 | 路径 | 说明 |
+|---|---|---|
+| GET | `/api/v1/admin/overview` | 扩展：增加近7天趋势、进行中PK数、今日挑战达成数、db大小、快照数、定时任务状态 |
+| GET | `/api/v1/admin/users` | 增加分页+筛选参数 `page/page_size/nickname/tier/online` |
+| GET | `/api/v1/admin/ledger` | 新增：`device_id/from/to/page/page_size` |
+| GET | `/api/v1/admin/configs` | 新增：`device_id/page/page_size` |
+| GET | `/api/v1/admin/snapshots` | 新增：`device_id/from/to/page/page_size` |
+| GET | `/api/v1/admin/friends` | 新增：`device_id/page/page_size` |
+| DELETE | `/api/v1/admin/friends/{a}/{b}` | 新增：解除好友 |
+| GET | `/api/v1/admin/invitations` | 新增：`page/page_size` |
+| GET | `/api/v1/admin/webhooks` | 增加分页 |
+| DELETE | `/api/v1/admin/webhooks/{id}` | 新增：删除 webhook |
+| GET | `/api/v1/admin/webhooks/{id}/logs` | 新增：投递日志 |
+| GET | `/api/v1/admin/pk/list` | 新增：`status/page/page_size` 历史对局 |
+| GET | `/api/v1/admin/ranks` | 新增：`week/page/page_size` 段位结算记录 |
+| GET | `/api/v1/admin/challenges` | 新增：`from/to/page/page_size` 历史挑战 |
+| GET | `/api/v1/admin/challenges/{day}/achieved` | 新增：指定日达成榜 |
+| GET | `/api/v1/admin/system/status` | 新增：db大小/快照数/最近清理/定时任务下次执行 |
+
+### 13.6 面板工程结构
+```
+panel/
+├─ app.py              # 入口，构建左右布局与路由
+├─ api.py              # 封装后台 admin API 调用
+├─ widgets.py          # 通用组件：分页表格、筛选栏、空状态
+└─ pages/
+   ├─ overview.py
+   ├─ data_users.py
+   ├─ data_ledger.py
+   ├─ data_configs.py
+   ├─ data_snapshots.py
+   ├─ data_friends.py
+   ├─ data_invitations.py
+   ├─ data_webhooks.py
+   ├─ leaderboard.py   # 通用榜单页，按 scope+方向渲染指标下拉
+   ├─ tier.py
+   ├─ challenge.py
+   └─ pk.py
+```

@@ -4,9 +4,10 @@ server:
   admin_token: "change-me-admin-token"
 
 storage:
-  db_path: "xindong_server.db"
+  run_dir: ".xindong"
+  db_path: ".xindong/xindong_server.db"
   snapshot_full_days: 30
-  log_dir: "logs"
+  log_dir: ".xindong/logs"
   log_keep_days: 30
 
 ratelimit:

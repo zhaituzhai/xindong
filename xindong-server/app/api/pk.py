@@ -13,6 +13,11 @@ def pk_match_route(req: PkMatchRequest, authorization: str = Header(...)):
     return pk_match.match(device_id, req.mode, req.friend_id, req.anonymous)
 
 
+@router.get("/pk/white_collar")
+def white_collar(limit: int = Query(50, le=500), date: str | None = Query(None)):
+    return pk_match.white_collar_leaderboard(date, limit)
+
+
 @router.get("/pk/{session_id}")
 def pk_detail(session_id: str, authorization: str = Header(...)):
     device_id = require_token(authorization)
@@ -26,11 +31,6 @@ def pk_end(session_id: str, authorization: str = Header(...)):
     from app.services import webhook_dispatch
     webhook_dispatch.dispatch("pk.settled", report)
     return report
-
-
-@router.get("/pk/white_collar")
-def white_collar(limit: int = Query(50, le=500), date: str | None = Query(None)):
-    return pk_match.white_collar_leaderboard(date, limit)
 
 
 @router.get("/challenge/today")

@@ -232,10 +232,12 @@
 ## 10. 非功能需求
 
 - **时区**：全后台固定 `Asia/Shanghai`，所有时间戳存储 UTC、展示按东八区。
-- **存储**：SQLite 单文件 `xindong_server.db`，WAL 模式，定期 vacuum。
+- **运行目录**：所有运行时产物统一放在 `.xindong/` 下，启动时自动创建。
+- **存储**：SQLite 单文件 `.xindong/data/xindong_server.db`，WAL 模式，定期 vacuum。
 - **并发**：FastAPI + uvicorn，单进程多线程（SQLite 写串行化用连接池 + 重试）。
 - **限流**：令牌桶，按 token + IP 双维度。
-- **日志**：结构化 JSON 日志，按天滚动，保留 30 天。
+- **日志**：文件日志 `.xindong/logs/server.log`，`TimedRotatingFileHandler` 按天滚动，保留 30 天，同时输出控制台；HTTP 访问/错误中间件记录每个请求方法、路径与状态码。
+- **管理操作日志**：`admin_logs` 表记录关键管理写操作（吊销 token / 注销用户 / 解除好友 / 删除 webhook / 段位结算），含时间、操作、目标、详情。
 - **配置**：`config.yaml`（端口、限流、段位阈值、挑战模板、webhook 默认重试策略）。
 - **自测数据生成器**：后台内置一个 `seed` 命令，生成 N 个模拟用户 + 模拟上报，用于榜单/PK 自测。
 - **零外部服务依赖**：不依赖 Redis / MQ / Postgres，全部 SQLite + 内存。
@@ -275,7 +277,10 @@ xindong-server/
 │  └─ jobs/
 │     └─ scheduler.py         # apscheduler：快照清理 / 段位结算 / 挑战生成
 ├─ panel/
-│  └─ app.py                  # Flet 管理面板
+│  ├─ app.py                  # Flet 入口：左右布局 + 两级导航树
+│  ├─ api.py                  # admin API 封装
+│  ├─ widgets.py              # 通用分页表格/筛选栏
+│  └─ pages/                  # overview/data/leaderboard/tier/challenge/pk
 └─ scripts/
    └─ seed.py                 # 模拟数据生成器
 ```
@@ -311,11 +316,12 @@ xindong-server/
 | 数据管理 | 好友关系 | 查看所有好友关系+解除 |
 | 数据管理 | 邀请码 | 查看邀请码使用情况 |
 | 数据管理 | Webhook管理 | 注册/查看/删除/投递日志 |
+| 数据管理 | 操作日志 | 按操作类型筛选分页查看管理操作日志 |
 | 榜单管理 | 日榜·正向 | 页面内下拉选指标(7个)+日期 |
 | 榜单管理 | 日榜·反向 | 页面内下拉选指标(9个)+日期 |
 | 榜单管理 | 周榜·正向 | 页面内下拉选指标(7个)+日期 |
 | 榜单管理 | 周榜·反向 | 页面内下拉选指标(9个)+日期 |
-| 段位管理 | 当前分布 | 全服段位分布+我的段位 |
+| 段位管理 | 当前分布 | 全服段位分布，点击段位卡片加载该段位用户分页列表 |
 | 段位管理 | 历史结算 | 按周查看 ranks 结算记录 |
 | 挑战管理 | 今日挑战 | 今日挑战定义+达成榜 |
 | 挑战管理 | 历史挑战 | 按日期范围查看历史挑战 |
@@ -354,6 +360,7 @@ xindong-server/
 | GET | `/api/v1/admin/challenges` | 新增：`from/to/page/page_size` 历史挑战 |
 | GET | `/api/v1/admin/challenges/{day}/achieved` | 新增：指定日达成榜 |
 | GET | `/api/v1/admin/system/status` | 新增：db大小/快照数/最近清理/定时任务下次执行 |
+| GET | `/api/v1/admin/logs` | 新增：`action/page/page_size` 管理操作日志分页 |
 
 ### 13.6 面板工程结构
 ```

@@ -5,7 +5,7 @@ server:
 
 storage:
   run_dir: ".xindong"
-  db_path: ".xindong/xindong_server.db"
+  db_path: ".xindong/data/xindong_server.db"
   snapshot_full_days: 30
   log_dir: ".xindong/logs"
   log_keep_days: 30

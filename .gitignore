@@ -1,0 +1,36 @@
+# ===== xindong 应用端编译产物（源码路径预留，编译内容不上传）=====
+xindong/*.dll
+xindong/*.exe
+xindong/*.pdb
+xindong/*.xml
+xindong/*.cache
+xindong/XinDong.deps.json
+xindong/XinDong.runtimeconfig.json
+xindong/xindong_config.json
+xindong/xindong_ledger.json
+xindong/zh-Hans/
+xindong/.codeartsdoer/
+
+# ===== Python 运行时与构建产物 =====
+__pycache__/
+*.py[cod]
+*.egg-info/
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+xindong-server/logs/
+.venv/
+venv/
+env/
+build/
+dist/
+
+# ===== 编辑器/IDE/工具 =====
+.codeartsdoer/
+.idea/
+.vscode/
+*.log
+*.swp
+.DS_Store
+Thumbs.db

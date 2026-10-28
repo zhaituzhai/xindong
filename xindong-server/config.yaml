@@ -1,0 +1,59 @@
+server:
+  host: 0.0.0.0
+  port: 8770
+  admin_token: "change-me-admin-token"
+
+storage:
+  db_path: "xindong_server.db"
+  snapshot_full_days: 30
+  log_dir: "logs"
+  log_keep_days: 30
+
+ratelimit:
+  default_per_minute: 60
+  heartbeat_per_minute: 120
+
+tier:
+  weights:
+    weekly_net_earned: 0.6
+    full_attendance_days_salary: 0.4
+  percentiles:
+    - 25
+    - 50
+    - 70
+    - 85
+    - 95
+  names:
+    - "青铜"
+    - "白银"
+    - "黄金"
+    - "铂金"
+    - "钻石"
+    - "王者"
+
+challenge:
+  templates:
+    - kind: "slack_minutes"
+      min: 20
+      max: 60
+    - kind: "net_earned_pct"
+      min: 70
+      max: 95
+    - kind: "zero_overtime"
+    - kind: "slack_count"
+      min: 3
+      max: 8
+    - kind: "single_slack_minutes"
+      min: 10
+      max: 25
+    - kind: "net_over_median_pct"
+      min: 10
+      max: 30
+  nondup_days: 30
+
+webhook:
+  max_retries: 3
+  backoff_base: 2.0
+
+offline:
+  heartbeat_timeout_seconds: 300

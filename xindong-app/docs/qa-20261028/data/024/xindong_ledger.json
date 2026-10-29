@@ -1,0 +1,88 @@
+{
+  "Version": 1,
+  "Records": [
+    {
+      "Date": "2026-10-28",
+      "NormalEarned": 0.66666666666666600,
+      "SlackingEarned": 0.6666666666666666666666666680,
+      "OvertimeLoss": 0,
+      "EmergencyCallLoss": 0,
+      "EmergencyCallEarned": 0,
+      "EmergencyCallSeconds": 0,
+      "EmergencyCallCount": 0,
+      "EmergencyCallMode": "Unpaid",
+      "EmergencyCallRate": 0,
+      "EmergencyCallActive": false,
+      "EmergencyCallStartedAt": null,
+      "EmergencyCallEndedAt": null,
+      "EmergencyCallFixedSubsidy": 0,
+      "EmergencyCallHourlyRate": 0,
+      "RoundingLoss": 0,
+      "WorkedSeconds": 40,
+      "WallClockExcludedSeconds": 0,
+      "SlackingSeconds": 40,
+      "OvertimeSeconds": 0,
+      "LockedHourlyAmount": 0.0,
+      "SlackingCount": 4,
+      "RoundingLostSeconds": 0,
+      "IsHoliday": false,
+      "IsOffDuty": false,
+      "AutoFilled": false,
+      "ClockOutAt": null,
+      "HolidayOvertime": false,
+      "HolidayOvertimeStart": null,
+      "SlackingStartedAt": null,
+      "ActiveSlackingType": "Daze",
+      "SlackingSessions": [
+        {
+          "Start": "2026-10-29T08:40:33.5907034+08:00",
+          "End": "2026-10-29T08:40:33.6090219+08:00",
+          "Type": "Toilet",
+          "Seconds": 10
+        },
+        {
+          "Start": "2026-10-29T08:40:33.6252168+08:00",
+          "End": "2026-10-29T08:40:33.6408374+08:00",
+          "Type": "Phone",
+          "Seconds": 10
+        },
+        {
+          "Start": "2026-10-29T08:40:33.6544973+08:00",
+          "End": "2026-10-29T08:40:33.6688569+08:00",
+          "Type": "Tea",
+          "Seconds": 10
+        },
+        {
+          "Start": "2026-10-29T08:40:33.6818094+08:00",
+          "End": "2026-10-29T08:40:33.6972547+08:00",
+          "Type": "Daze",
+          "Seconds": 10
+        }
+      ],
+      "EmergencyCallSessions": [],
+      "SlackingStats": [
+        {
+          "Type": "Toilet",
+          "Seconds": 10,
+          "Amount": 0.1666666666666666666666666670
+        },
+        {
+          "Type": "Phone",
+          "Seconds": 10,
+          "Amount": 0.1666666666666666666666666670
+        },
+        {
+          "Type": "Tea",
+          "Seconds": 10,
+          "Amount": 0.1666666666666666666666666670
+        },
+        {
+          "Type": "Daze",
+          "Seconds": 10,
+          "Amount": 0.1666666666666666666666666670
+        }
+      ],
+      "LastUpdated": "2026-10-29T08:40:33.697278+08:00"
+    }
+  ]
+}

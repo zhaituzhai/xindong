@@ -1,0 +1,577 @@
+using System.Globalization;
+using System.IO;
+using System.Reflection;
+using System.Security.Cryptography;
+using System.Text;
+using System.Text.Json;
+using System.Windows;
+using XinDong.Models;
+using XinDong.Services;
+using XinDong.ViewModels;
+using XinDong.Views;
+
+internal static class Program
+{
+    private static readonly List<object> Results = new();
+    private static string Root = "";
+    private static int Serial;
+    private static int Failed;
+    private static readonly BindingFlags Private = BindingFlags.Instance | BindingFlags.NonPublic;
+    private static readonly DateTime Day = new(2026, 10, 28);
+
+    [STAThread]
+    private static int Main(string[] args)
+    {
+        Root = Path.GetFullPath(args.Length == 0 ? "." : args[0]);
+        Directory.CreateDirectory(Root);
+        // Initialize resources without starting the production App or its timer/registry code.
+        var app = new XinDong.App();
+        app.InitializeComponent();
+        app.ShutdownMode = ShutdownMode.OnExplicitShutdown;
+        Baseline();
+        Scheduling();
+        StorageAndBoard();
+        RegressionScenarios();
+        var summary = new
+        {
+            TestedAt = DateTime.Now,
+            Target = typeof(MainViewModel).Assembly.Location,
+            TargetSha256 = Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(typeof(MainViewModel).Assembly.Location))),
+            Runtime = Environment.Version.ToString(),
+            Total = Results.Count, Passed = Results.Count - Failed, Failed, Results
+        };
+        File.WriteAllText(Path.Combine(Root, "results.json"),
+            JsonSerializer.Serialize(summary, new JsonSerializerOptions { WriteIndented = true }), Encoding.UTF8);
+        Console.WriteLine($"TOTAL {Results.Count}; PASS {Results.Count - Failed}; FAIL {Failed}");
+        app.Shutdown();
+        return 0;
+    }
+
+    private static void Check(string id, string expected, Func<string> run)
+    {
+        try
+        {
+            var actual = run();
+            var pass = actual == expected;
+            if (!pass) Failed++;
+            Results.Add(new { Id = id, Pass = pass, Expected = expected, Actual = actual });
+            Console.WriteLine($"{(pass ? "PASS" : "FAIL")} {id}: expected={expected}; actual={actual}");
+        }
+        catch (Exception ex)
+        {
+            while (ex is TargetInvocationException && ex.InnerException != null) ex = ex.InnerException;
+            Failed++;
+            Results.Add(new { Id = id, Pass = false, Expected = expected, Actual = $"{ex.GetType().Name}: {ex.Message}" });
+            Console.WriteLine($"FAIL {id}: {ex.GetType().Name}: {ex.Message}");
+        }
+    }
+
+    private static string N(double value) => value.ToString("0.###", CultureInfo.InvariantCulture);
+    private static string M(decimal value) => value.ToString("0.####", CultureInfo.InvariantCulture);
+    private static string B(bool value) => value ? "true" : "false";
+    private static object? Invoke(object obj, string name, params object?[] args) =>
+        obj.GetType().GetMethod(name, Private)!.Invoke(obj, args);
+    private static T Get<T>(object obj, string name) => (T)obj.GetType().GetField(name, Private)!.GetValue(obj)!;
+    private static void Set(object obj, string name, object? value) =>
+        obj.GetType().GetField(name, Private)!.SetValue(obj, value);
+    private static string NewDirectory()
+    {
+        var path = Path.Combine(Root, "data", (++Serial).ToString("000"));
+        Directory.CreateDirectory(path);
+        return path;
+    }
+
+    private static UserConfig Config() => new()
+    {
+        SalaryMode = SalaryMode.Hourly, SalaryAmount = 60m,
+        RestSystem = RestSystem.NoRest, WorkStart = "09:00", WorkEnd = "18:00",
+        LunchStart = "12:00", LunchEnd = "13:00",
+        MonthlyRent = 0, DailyCommuteFood = 0,
+        FirstRunDate = Day, StartWithWindows = false
+    };
+
+    private sealed class Fixture : IDisposable
+    {
+        public readonly StorageService Storage = new(NewDirectory());
+        public readonly UserConfig Config;
+        public readonly Ledger Ledger = new();
+        public readonly MainViewModel Vm;
+        public readonly DailyRecord Record;
+        public Fixture(UserConfig? config = null, DateTime? date = null)
+        {
+            Config = config ?? Program.Config();
+            Vm = new MainViewModel(Storage, Config, Ledger);
+            Record = new DailyRecord { Date = (date ?? Day).ToString("yyyy-MM-dd"), LastUpdated = date ?? Day };
+            Ledger.Records.Clear();
+            Ledger.Records.Add(Record);
+            Set(Vm, "_today", Record);
+            Set(Vm, "_sessionDate", date ?? Day);
+            Set(Vm, "_offDuty", false);
+            Set(Vm, "_slacking", false);
+            Set(Vm, "_holidayOvertime", false);
+            Set(Vm, "_emergency", false);
+            Set(Vm, "_state", WorkState.Working);
+            Set(Vm, "_wallClockExcludedSeconds", 0d);
+        }
+        public void Dispose() => Vm.Dispose();
+    }
+
+    private static void Baseline()
+    {
+        Check("PAY-01-monthly-D-H-rates", "7.5|208.3333|27.7778", () =>
+        {
+            var c = Config();
+            c.SalaryMode = SalaryMode.Monthly; c.SalaryAmount = 6250;
+            c.WorkStart = "08:30"; c.WorkEnd = "17:30"; c.LunchEnd = "13:30";
+            return $"{N(c.ComputedStandardHours)}|{M(c.DailySalary)}|{M(c.HourlySalary)}";
+        });
+        Check("PAY-02-lunch-outside-shift", "9", () =>
+        {
+            var c = Config(); c.LunchStart = "20:00"; c.LunchEnd = "21:00";
+            return N(c.ComputedStandardHours);
+        });
+        Check("PAY-03-overlapping-lunch", "8", () =>
+        {
+            var c = Config(); c.LunchStart = "08:00"; c.LunchEnd = "10:00";
+            return N(c.ComputedStandardHours);
+        });
+        Check("PAY-04-no-lunch", "9", () =>
+        {
+            var c = Config(); c.LunchStart = c.LunchEnd = "12:00";
+            return N(c.ComputedStandardHours);
+        });
+        foreach (var (seconds, expected) in new[] { (1199d, "0"), (1200d, "0"), (1799d, "0"), (1800d, "30"), (3599d, "30"), (3600d, "60") })
+        {
+            Check($"PAY-05-locked-{seconds}", expected, () =>
+            {
+                using var f = new Fixture();
+                return M((decimal)Invoke(f.Vm, "LockedAmount", seconds)!);
+            });
+        }
+        foreach (var (clock, expected) in new[] { ("08:00", "0"), ("11:00", "7200"), ("12:30", "10800"), ("14:00", "14400"), ("20:00", "28800") })
+        {
+            Check($"PAY-06-wall-clock-{clock}", expected, () =>
+            {
+                using var f = new Fixture();
+                return N((double)Invoke(f.Vm, "CalculateWallClockWorkedSeconds", Day + TimeSpan.Parse(clock))!);
+            });
+        }
+        Check("PAY-07-monthly-cap", "200", () =>
+        {
+            var c = Config(); c.SalaryMode = SalaryMode.Monthly; c.SalaryAmount = 6000;
+            using var f = new Fixture(c); f.Record.WorkedSeconds = 100000;
+            return M(f.Vm.TodayEarned);
+        });
+        Check("PAY-08-normal-overtime-stages", "210", () =>
+        {
+            using var f = new Fixture();
+            return M((decimal)Invoke(f.Vm, "OvertimeLossFor", 10800d, false)!);
+        });
+        Check("PAY-09-holiday-overtime-stages", "1140", () =>
+        {
+            using var f = new Fixture();
+            return M((decimal)Invoke(f.Vm, "OvertimeLossFor", 32400d, true)!);
+        });
+        Check("PAY-10-custom-base", "15.2644", () =>
+        {
+            var c = Config(); c.RestSystem = RestSystem.DoubleWeekend;
+            c.WorkStart = "08:30"; c.WorkEnd = "17:30"; c.LunchEnd = "13:30";
+            c.UseCustomOvertimeBase = true; c.OvertimeBaseSalary = 2490;
+            return M(c.OvertimeBaseHourly);
+        });
+        Check("PAY-11-survival", "143.33", () =>
+        {
+            var c = Config(); c.MonthlyRent = 2500; c.DailyCommuteFood = 60;
+            return M(c.DailySurvivalLine);
+        });
+        foreach (var (minute, warn) in new[] { (19, false), (20, true), (25, true), (29, true), (30, false) })
+        {
+            Check($"PAY-12-rounding-warning-{minute}", B(warn), () =>
+            {
+                using var f = new Fixture();
+                var called = false;
+                f.Vm.ClockOutTimeRequested += _ => Day.AddHours(9).AddMinutes(minute);
+                f.Vm.RoundingWarningRequested += _ => { called = true; return false; };
+                f.Vm.RequestClockOut();
+                return B(called);
+            });
+        }
+        Check("PAY-13-confirm-rounded", "0|25|1500", () =>
+        {
+            using var f = new Fixture();
+            f.Vm.ClockOutTimeRequested += _ => Day.AddHours(9).AddMinutes(25);
+            f.Vm.RoundingWarningRequested += _ => true;
+            f.Vm.RequestClockOut();
+            return $"{M(f.Record.NormalEarned)}|{M(f.Record.RoundingLoss)}|{N(f.Record.RoundingLostSeconds)}";
+        });
+        Check("PAY-14-clockout-cancel", "false", () =>
+        {
+            using var f = new Fixture();
+            f.Vm.ClockOutTimeRequested += _ => null;
+            f.Vm.RequestClockOut(); return B(f.Record.IsOffDuty);
+        });
+        Check("PAY-15-clockout-future-rejected", "false", () =>
+        {
+            using var f = new Fixture();
+            f.Vm.ClockOutTimeRequested += _ => DateTime.Now.AddHours(1);
+            f.Vm.RequestClockOut(); return B(f.Record.IsOffDuty);
+        });
+        Check("STATE-01-work-lunch-overtime", "Working|LunchBreak|Overtime", () =>
+        {
+            using var f = new Fixture();
+            var states = new List<string>();
+            foreach (var hour in new[] { 10, 12, 19 })
+            {
+                Invoke(f.Vm, "UpdateState", Day.AddHours(hour), 0d);
+                states.Add(f.Vm.State.ToString());
+            }
+            return string.Join("|", states);
+        });
+        Check("STATE-02-four-slacking-types", "4|4|40", () =>
+        {
+            using var f = new Fixture();
+            foreach (var type in Enum.GetValues<SlackingType>())
+            {
+                f.Vm.StartSlacking(type);
+                Invoke(f.Vm, "AccrueSlacking", 10d);
+                f.Vm.StopSlacking();
+            }
+            return $"{f.Record.SlackingCount}|{f.Record.SlackingStats.Count}|{N(f.Record.SlackingSeconds)}";
+        });
+        Check("STATE-03-slack-15-minute-reminder-once", "1", () =>
+        {
+            using var f = new Fixture();
+            f.Vm.StartSlacking(SlackingType.Phone);
+            Set(f.Vm, "_slackSessionSeconds", 901d);
+            var count = 0; f.Vm.IslandNoticeRequested += _ => count++;
+            Invoke(f.Vm, "CheckReminders", Day.AddHours(11));
+            Invoke(f.Vm, "CheckReminders", Day.AddHours(11));
+            return count.ToString();
+        });
+        foreach (var mode in Enum.GetValues<EmergencyCallCompensationMode>())
+        {
+            var expected = mode == EmergencyCallCompensationMode.Unpaid ? "120|0" :
+                mode == EmergencyCallCompensationMode.FixedSubsidy ? "0|100" : "0|90";
+            Check($"CALL-01-single-{mode}", expected, () =>
+            {
+                using var f = new Fixture();
+                Set(f.Vm, "_offDuty", true); f.Record.IsOffDuty = true;
+                f.Vm.StartEmergencyCall(new EmergencyCallOptions { Mode = mode, FixedSubsidy = 100, HourlyRate = 90 });
+                var end = Day.AddHours(20);
+                Set(f.Vm, "_emergencyStart", end.AddHours(-1));
+                Invoke(f.Vm, "FinalizeEmergency", end);
+                return $"{M(f.Record.EmergencyCallLoss)}|{M(f.Record.EmergencyCallEarned)}";
+            });
+        }
+    }
+
+    private static void Scheduling()
+    {
+        Check("SCHED-01-D-values", "30|28|26|24|21.75", () =>
+            string.Join("|", Enum.GetValues<RestSystem>().Select(r => M(r.PayDays()))));
+        Check("SCHED-02-double-weekend", "true|false|false", () =>
+        {
+            var c = Config(); c.RestSystem = RestSystem.DoubleWeekend;
+            return $"{B(c.IsWorkday(Day))}|{B(c.IsWorkday(new(2026, 10, 24)))}|{B(c.IsWorkday(new(2026, 10, 25)))}";
+        });
+        Check("SCHED-03-big-small", "false|false|true|false", () =>
+        {
+            var c = Config(); c.RestSystem = RestSystem.BigSmallWeek;
+            c.HolidayCalendar.BigSmallWeekAnchorMonday = new(2026, 10, 19);
+            c.HolidayCalendar.BigSmallWeekAnchorIsBig = true;
+            return string.Join("|", new[] { new DateTime(2026, 10, 24), new(2026, 10, 25), new(2026, 10, 31), new(2026, 11, 1) }.Select(d => B(c.IsWorkday(d))));
+        });
+        Check("SCHED-04-makeup-priority", "true", () =>
+        {
+            var c = Config(); var key = Day.ToString("yyyy-MM-dd");
+            c.HolidayCalendar.Workdays.Add(key); c.HolidayCalendar.Holidays[key] = "test";
+            c.TodayOff = true; c.TodayOffDate = key;
+            return B(c.IsWorkday(Day));
+        });
+        Check("SCHED-05-rest-quota", "4", () =>
+        {
+            var c = Config(); c.RestSystem = RestSystem.Rest4Days;
+            using var f = new Fixture(c);
+            foreach (var d in f.Vm.HolidayDays.Where(d => !d.IsPlaceholder).Take(5).ToList())
+                f.Vm.ToggleHolidayDayCommand.Execute(d);
+            return c.HolidayCalendar.RegularRestDays.Count.ToString();
+        });
+        Check("SCHED-06-business-day", "2026-10-27|2026-10-28", () =>
+        {
+            using var f = new Fixture();
+            return $"{f.Vm.BusinessDate(Day.AddHours(7.99)):yyyy-MM-dd}|{f.Vm.BusinessDate(Day.AddHours(8)):yyyy-MM-dd}";
+        });
+        Check("SCHED-07-fallback-2026", "33|6", () =>
+        {
+            var data = new HolidayService().LoadFallback(2026)!;
+            return $"{data.Holidays.Count}|{data.Workdays.Count}";
+        });
+        Check("SCHED-08-first-install-no-fake-history", "1", () =>
+        {
+            var ledger = new Ledger();
+            using var vm = new MainViewModel(new StorageService(NewDirectory()), Config(), ledger);
+            return ledger.Records.Count.ToString();
+        });
+        Check("SCHED-09-auto-fill-no-duplicates", "true", () =>
+        {
+            var c = Config(); c.FirstRunDate = DateTime.Today.AddDays(-5);
+            var ledger = new Ledger { Records = new() { new DailyRecord { Date = DateTime.Today.AddDays(-5).ToString("yyyy-MM-dd"), IsOffDuty = true } } };
+            using var vm = new MainViewModel(new StorageService(NewDirectory()), c, ledger);
+            return B(ledger.Records.Count == 6 && ledger.Records.Select(r => r.Date).Distinct().Count() == 6 &&
+                ledger.Records.Count(r => r.AutoFilled) == 4);
+        });
+        Check("SCHED-10-offline-fallback", "true|33|6", () =>
+        {
+            var r = new HolidayService().SyncYearAsync(2026, new CancellationToken(true)).GetAwaiter().GetResult();
+            return $"{B(r.Success && !r.FromNetwork)}|{r.Holidays.Count}|{r.Workdays.Count}";
+        });
+        Check("SCHED-11-live-sync-with-fallback", "true|33|6", () =>
+        {
+            var r = new HolidayService().SyncYearAsync(2026).GetAwaiter().GetResult();
+            File.WriteAllText(Path.Combine(Root, "holiday-sync.json"), JsonSerializer.Serialize(r));
+            return $"{B(r.Success)}|{r.Holidays.Count}|{r.Workdays.Count}";
+        });
+    }
+
+    private static void StorageAndBoard()
+    {
+        Check("STORE-01-config-roundtrip", "7000|ExcelCamouflage", () =>
+        {
+            var s = new StorageService(NewDirectory()); var c = Config();
+            c.SalaryAmount = 7000; c.BossKeyMode = BossKeyMode.ExcelCamouflage;
+            s.SaveConfig(c); var got = s.LoadConfig();
+            return $"{M(got.SalaryAmount)}|{got.BossKeyMode}";
+        });
+        Check("STORE-02-ledger-roundtrip", "123.45|test", () =>
+        {
+            var s = new StorageService(NewDirectory());
+            var l = new Ledger { Records = new() { new DailyRecord { Date = "test", NormalEarned = 123.45m } } };
+            s.SaveLedger(l); var r = s.LoadLedger().Records.Single();
+            return $"{M(r.NormalEarned)}|{r.Date}";
+        });
+        Check("STORE-03-corruption-backup", "42", () =>
+        {
+            var s = new StorageService(NewDirectory());
+            s.SaveLedger(new Ledger { Records = new() { new DailyRecord { Date = Day.ToString("yyyy-MM-dd"), NormalEarned = 42m } } });
+            s.EnsureDailyBackup(); File.WriteAllText(s.LedgerPath, "{broken");
+            return M(s.LoadLedger().Records.Single().NormalEarned);
+        });
+        Check("STORE-04-backup-retain-seven", "7", () =>
+        {
+            var s = new StorageService(NewDirectory()); s.SaveLedger(new Ledger());
+            for (var i = 1; i <= 10; i++)
+            {
+                var p = Path.Combine(s.BaseDirectory, $"xindong_ledger.bak.{DateTime.Today.AddDays(-i):yyyyMMdd}.json");
+                File.WriteAllText(p, "{\"Records\":[]}"); File.SetLastWriteTime(p, DateTime.Now.AddDays(-i));
+            }
+            s.EnsureDailyBackup();
+            return Directory.GetFiles(s.BaseDirectory, "xindong_ledger.bak.*.json").Length.ToString();
+        });
+        Check("STORE-05-CSV-bom-fields", "EFBBBF|16|2", () =>
+        {
+            var s = new StorageService(NewDirectory()); var p = Path.Combine(s.BaseDirectory, "test.csv");
+            s.ExportCsv(p, new[] { new DailyRecord { Date = Day.ToString("yyyy-MM-dd"), EmergencyCallCount = 2 } });
+            var bytes = File.ReadAllBytes(p); var lines = File.ReadAllLines(p);
+            return $"{Convert.ToHexString(bytes[..3])}|{lines[0].Split(',').Length}|{lines.Length}";
+        });
+        Check("BOARD-01-week-range", "2026-10-26|2026-11-01", () =>
+        {
+            var range = StorageService.GetRange(ViewMode.Weekly, Day);
+            return $"{range.Start:yyyy-MM-dd}|{range.End:yyyy-MM-dd}";
+        });
+        Check("BOARD-02-leap-month", "2024-02-01|2024-02-29", () =>
+        {
+            var range = StorageService.GetRange(ViewMode.Monthly, new DateTime(2024, 2, 15));
+            return $"{range.Start:yyyy-MM-dd}|{range.End:yyyy-MM-dd}";
+        });
+        Check("BOARD-03-aggregate-metrics", "200|130|1|2.5|25", () =>
+        {
+            var c = Config(); c.MonthlyRent = 300; c.DailyCommuteFood = 60;
+            var l = new Ledger { Records = new() { new DailyRecord
+            { Date = Day.ToString("yyyy-MM-dd"), WorkedSeconds = 7200, OvertimeSeconds = 1800,
+              NormalEarned = 200, SlackingEarned = 30, OvertimeLoss = 5 } } };
+            var a = new StorageService(NewDirectory()).BuildAggregate(l, ViewMode.Daily, Day, c);
+            return $"{M(a.TotalIncome)}|{M(a.ProfitNet)}|{a.ActiveDayCount}|{N(a.AverageWorkHours)}|{M(a.HedgeNet)}";
+        });
+        Check("BOARD-04-navigation-and-detail", "12|7|42|12|9|1", () =>
+        {
+            using var f = new Fixture(); f.Vm.SetBoardDate(Day); f.Vm.SetViewMode("Daily");
+            f.Vm.RefreshBoard(); var week = f.Vm.CalendarDays.Count;
+            f.Vm.SetCalendarExpanded(true); var month = f.Vm.CalendarDays.Count;
+            f.Vm.SetViewMode("Monthly"); f.Vm.ShowDetail();
+            return $"{f.Vm.BoardMetrics.Count}|{week}|{month}|{f.Vm.MonthChips.Count}|{f.Vm.YearChips.Count}|{f.Vm.DetailRecords.Count}";
+        });
+        Check("BOARD-05-range-export-filters", "2", () =>
+        {
+            using var f = new Fixture(); f.Ledger.Records.Add(new() { Date = Day.AddMonths(-1).ToString("yyyy-MM-dd") });
+            f.Vm.SetBoardDate(Day); f.Vm.SetViewMode("Monthly");
+            var p = Path.Combine(f.Storage.BaseDirectory, "range.csv"); f.Vm.ExportCurrentRangeCsv(p);
+            return File.ReadAllLines(p).Length.ToString();
+        });
+        Check("UI-01-dialog-construction", "true", () =>
+        {
+            var salary = new SalarySetupWindow(); var call = new EmergencyCallWindow();
+            var clock = new ClockOutTimeWindow(new ClockOutTimeContext
+            { BusinessDate = Day, Earliest = Day.AddHours(9), WorkStart = Day.AddHours(9), WorkEnd = Day.AddHours(18), Now = Day.AddHours(16) });
+            salary.Close(); call.Close(); clock.Close(); return "true";
+        });
+    }
+
+    private static void RegressionScenarios()
+    {
+        Check("BUG-01-midnight-select-previous-evening", "23", () =>
+        {
+            var w = new ClockOutTimeWindow(new ClockOutTimeContext
+            {
+                BusinessDate = Day, WorkStart = Day.AddHours(9), WorkEnd = Day.AddHours(18),
+                Earliest = Day.AddHours(9), Now = Day.AddDays(1).AddMinutes(30)
+            });
+            Invoke(w, "SelectTime", 23, 0, false);
+            var hour = w.GetType().GetProperty("SelectedHour", Private)!.GetValue(w);
+            w.Close(); return hour!.ToString()!;
+        });
+        Check("BUG-02-undo-exclusion-lost-on-final-clockout", "3600", () =>
+        {
+            using var f = new Fixture();
+            f.Record.WorkedSeconds = 3600; f.Record.IsOffDuty = true; Set(f.Vm, "_offDuty", true);
+            f.Vm.UndoOffDuty();
+            Invoke(f.Vm, "PerformClockOutAt", DateTime.Now);
+            return N(Math.Floor(f.Record.WorkedSeconds));
+        });
+        Check("BUG-03-undo-exclusion-lost-on-restart", "3600", () =>
+        {
+            using var f = new Fixture();
+            f.Record.WorkedSeconds = 3600; f.Record.IsOffDuty = true; Set(f.Vm, "_offDuty", true);
+            f.Vm.UndoOffDuty(); f.Vm.Persist();
+            using var restart = new MainViewModel(f.Storage, f.Config, f.Storage.LoadLedger());
+            return N(Math.Floor(Get<DailyRecord>(restart, "_today").WorkedSeconds));
+        });
+        Check("BUG-04-restart-slack-at-lunch-double-count", "3600", () =>
+        {
+            var c = Config();
+            var lunch = DateTime.Today.AddHours(DateTime.Now.Hour);
+            c.LunchStart = lunch.ToString("HH:mm"); c.LunchEnd = lunch.AddHours(1).ToString("HH:mm");
+            c.WorkEnd = "23:00";
+            var r = new DailyRecord
+            {
+                Date = DateTime.Today.ToString("yyyy-MM-dd"), WorkedSeconds = 10800, SlackingSeconds = 1800,
+                SlackingStartedAt = lunch.AddHours(-1), LastUpdated = lunch.AddMinutes(-30),
+                SlackingStats = new() { new() { Type = SlackingType.Phone, Seconds = 1800 } }
+            };
+            var ledger = new Ledger { Records = new() { r } };
+            using var vm = new MainViewModel(new StorageService(NewDirectory()), c, ledger);
+            return N(r.SlackingSeconds);
+        });
+        Check("BUG-05-restart-slack-after-work-loses-gap", "3600", () =>
+        {
+            var c = Config();
+            var end = DateTime.Today.AddHours(DateTime.Now.Hour);
+            c.WorkStart = "01:00"; c.WorkEnd = end.ToString("HH:mm");
+            c.LunchStart = c.LunchEnd = "00:00";
+            var r = new DailyRecord
+            {
+                Date = DateTime.Today.ToString("yyyy-MM-dd"), WorkedSeconds = 10800, SlackingSeconds = 1800,
+                SlackingStartedAt = end.AddHours(-1), LastUpdated = end.AddMinutes(-30),
+                SlackingStats = new() { new() { Type = SlackingType.Phone, Seconds = 1800 } }
+            };
+            var ledger = new Ledger { Records = new() { r } };
+            using var vm = new MainViewModel(new StorageService(NewDirectory()), c, ledger);
+            return N(r.SlackingSeconds);
+        });
+        Check("BUG-06-mixed-call-unpaid-then-paid-recalc", "120", () =>
+        {
+            using var f = new Fixture(); f.Record.IsOffDuty = true; Set(f.Vm, "_offDuty", true);
+            f.Record.OvertimeSeconds = f.Record.EmergencyCallSeconds = 3600;
+            f.Record.OvertimeLoss = f.Record.EmergencyCallLoss = 120;
+            f.Record.EmergencyCallCount = 1; f.Record.EmergencyCallRate = 2;
+            f.Vm.StartEmergencyCall(new() { Mode = EmergencyCallCompensationMode.FixedSubsidy, FixedSubsidy = 100 });
+            Set(f.Vm, "_emergencyStart", Day.AddHours(19));
+            Invoke(f.Vm, "FinalizeEmergency", Day.AddHours(20));
+            Invoke(f.Vm, "RecalculateAllOvertimeLosses");
+            return M(f.Record.EmergencyCallLoss);
+        });
+        Check("BUG-07-mixed-call-paid-then-unpaid-recalc", "120", () =>
+        {
+            using var f = new Fixture(); f.Record.IsOffDuty = true; Set(f.Vm, "_offDuty", true);
+            f.Record.OvertimeSeconds = f.Record.EmergencyCallSeconds = 3600;
+            f.Record.EmergencyCallEarned = 100; f.Record.EmergencyCallCount = 1;
+            f.Record.EmergencyCallMode = EmergencyCallCompensationMode.FixedSubsidy;
+            f.Vm.StartEmergencyCall(new() { Mode = EmergencyCallCompensationMode.Unpaid });
+            Set(f.Vm, "_emergencyStart", Day.AddHours(19));
+            Invoke(f.Vm, "FinalizeEmergency", Day.AddHours(20));
+            Invoke(f.Vm, "RecalculateAllOvertimeLosses");
+            return M(f.Record.EmergencyCallLoss);
+        });
+        Check("BUG-08-call-live-board-time", "01:00:00", () =>
+        {
+            using var f = new Fixture(); f.Record.IsOffDuty = true; Set(f.Vm, "_offDuty", true);
+            f.Vm.StartEmergencyCall(new());
+            Set(f.Vm, "_emergencySeconds", 3600d);
+            f.Vm.SetBoardDate(Day); f.Vm.RefreshBoard();
+            return f.Vm.BoardOvertimeTimeText;
+        });
+        Check("BUG-09-fractional-stage-30min", "75", () =>
+        {
+            var c = Config(); c.NormalOvertimeStageHours = 0.5;
+            using var f = new Fixture(c);
+            return M((decimal)Invoke(f.Vm, "OvertimeLossFor", 3600d, false)!);
+        });
+        Check("BUG-10-save-failure-must-not-show-success", "false", () =>
+        {
+            using var f = new Fixture(); Directory.CreateDirectory(f.Storage.ConfigPath);
+            f.Vm.SaveSettings();
+            return B(f.Vm.SettingsMessage.StartsWith("\u2705"));
+        });
+        Check("BUG-11-negative-multiplier-rejected", "true", () =>
+        {
+            using var f = new Fixture(); f.Config.OvertimeRateNormal = -2;
+            f.Vm.SaveSettings();
+            return B(f.Vm.SettingsMessage.StartsWith("\u274C"));
+        });
+        Check("BUG-12-first-install-unset-salary", "0", () =>
+        {
+            return M(new StorageService(NewDirectory()).LoadConfig().SalaryAmount);
+        });
+        Check("BUG-13-restart-after-business-cutoff-finalizes-old-call", "false", () =>
+        {
+            var c = Config(); var today = DateTime.Today; c.FirstRunDate = today.AddDays(-1);
+            var old = new DailyRecord
+            {
+                Date = today.AddDays(-1).ToString("yyyy-MM-dd"),
+                IsOffDuty = true, EmergencyCallActive = true,
+                EmergencyCallStartedAt = today.AddDays(-1).AddHours(23),
+                ClockOutAt = today.AddDays(-1).AddHours(18),
+                EmergencyCallMode = EmergencyCallCompensationMode.Unpaid,
+                EmergencyCallRate = 2
+            };
+            var ledger = new Ledger { Records = new() { old } };
+            using var vm = new MainViewModel(new StorageService(NewDirectory()), c, ledger);
+            vm.Persist();
+            return B(old.EmergencyCallActive);
+        });
+        Check("BUG-14-backdated-clockout-keeps-later-slack", "false", () =>
+        {
+            using var f = new Fixture();
+            f.Vm.StartSlacking(SlackingType.Phone);
+            Thread.Sleep(1100);
+            Invoke(f.Vm, "OnTick", null, EventArgs.Empty);
+            f.Vm.StopSlacking();
+            Invoke(f.Vm, "PerformClockOutAt", Day.AddHours(11));
+            return B(f.Record.SlackingSeconds > 0);
+        });
+        Check("BUG-15-autofill-hourly-fractional-shift-rounding", "420", () =>
+        {
+            var c = Config(); c.WorkEnd = "17:15"; c.FirstRunDate = DateTime.Today.AddDays(-2);
+            var ledger = new Ledger { Records = new() { new DailyRecord { Date = DateTime.Today.AddDays(-2).ToString("yyyy-MM-dd"), IsOffDuty = true } } };
+            using var vm = new MainViewModel(new StorageService(NewDirectory()), c, ledger);
+            return M(ledger.Records.Single(r => r.Date == DateTime.Today.AddDays(-1).ToString("yyyy-MM-dd")).NormalEarned);
+        });
+        Check("BUG-16-settings-shorter-shift-recomputes-worked-time", "3600", () =>
+        {
+            using var f = new Fixture(); f.Record.WorkedSeconds = 14400;
+            f.Config.WorkStart = "09:00"; f.Config.WorkEnd = "10:00";
+            f.Vm.SaveSettings(); Invoke(f.Vm, "ReconcileTimeAxis", Day.AddHours(16));
+            return N(f.Record.WorkedSeconds);
+        });
+    }
+}

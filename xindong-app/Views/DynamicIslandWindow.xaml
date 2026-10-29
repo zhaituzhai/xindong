@@ -1,0 +1,254 @@
+<Window x:Class="XinDong.Views.DynamicIslandWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="薪动灵动岛"
+        Width="520" Height="44"
+        WindowStyle="None"
+        AllowsTransparency="True"
+        Background="Transparent"
+        ResizeMode="NoResize"
+        ShowInTaskbar="False"
+        ShowActivated="False"
+        Topmost="True"
+        WindowStartupLocation="Manual"
+        FontFamily="{StaticResource UiFont}">
+
+    <!-- 固定 520×44 透明窗口；真正缩放的是内部胶囊，避免窗口级 resize 掉帧 -->
+    <Border x:Name="IslandBorder"
+            Width="64" Height="20"
+            HorizontalAlignment="Right" VerticalAlignment="Top"
+            CornerRadius="11"
+            Background="#E61C1C1E"
+            BorderBrush="#33FFFFFF"
+            BorderThickness="1"
+            ClipToBounds="True"
+            MouseDown="Island_MouseDown"
+            PreviewMouseLeftButtonDown="Island_PreviewMouseLeftButtonDown"
+            MouseEnter="Island_MouseEnter"
+            MouseLeave="Island_MouseLeave">
+
+        <Grid>
+            <!-- 展开态完整内容：固定 520×44，只被胶囊裁剪，缩放时文字不重排 -->
+            <Grid x:Name="FullLayer" Width="520" Height="44"
+                  HorizontalAlignment="Right" VerticalAlignment="Top"
+                  Opacity="0" IsHitTestVisible="False">
+                <!-- 正常态内容 -->
+                <Grid x:Name="NormalLayer" Margin="14,0">
+                    <Grid.Style>
+                        <Style TargetType="Grid">
+                            <Setter Property="Visibility" Value="Visible" />
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding IsCamouflage}" Value="True">
+                                    <Setter Property="Visibility" Value="Collapsed" />
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </Grid.Style>
+
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+
+                    <!-- 状态点 -->
+                    <Border Width="8" Height="8" CornerRadius="4" VerticalAlignment="Center"
+                            Background="{Binding StatusBrush}" />
+
+                    <TextBlock Grid.Column="1" Text="{Binding IslandStateText}" FontSize="11"
+                               Margin="8,0,0,0" VerticalAlignment="Center"
+                               Foreground="#A1A1A6" />
+
+                    <TextBlock Grid.Column="2" Text="{Binding IslandAmountText}"
+                               FontFamily="{StaticResource MonoFont}" FontSize="14" FontWeight="Bold"
+                               HorizontalAlignment="Right" VerticalAlignment="Center" Margin="8,0"
+                               Foreground="{Binding EarnedBrush}" ToolTip="今日已赚" />
+
+                    <TextBlock Grid.Column="3" Text="{Binding IslandSlackText}"
+                               FontFamily="{StaticResource MonoFont}" FontSize="9.5"
+                               VerticalAlignment="Center" Foreground="#30D158" Margin="4,0,0,0"
+                               ToolTip="摸鱼白赚" />
+
+                    <TextBlock Grid.Column="4" Text="{Binding IslandOvertimeText}"
+                               FontFamily="{StaticResource MonoFont}" FontSize="9.5"
+                               VerticalAlignment="Center" Foreground="#FF453A" Margin="6,0,0,0"
+                               ToolTip="义务加班扣" />
+
+                    <TextBlock Grid.Column="5" Text="{Binding IslandSubText}"
+                               FontFamily="{StaticResource MonoFont}" FontSize="10"
+                               VerticalAlignment="Center" Foreground="#8E8E93" Margin="7,0,0,0"
+                               ToolTip="总工时 = 有效工时 + 义务加班" />
+
+                    <!-- 摸鱼快捷开关 -->
+                    <Button x:Name="NormalFishButton" Grid.Column="6" Width="24" Height="24" Cursor="Hand"
+                            Visibility="{Binding ShowLeisureButtons, Converter={StaticResource BoolToVis}}"
+                            Background="Transparent" BorderThickness="0" Foreground="#E5E5EA"
+                            ToolTip="{Binding IslandFishToolTip}" Click="Fish_Click">
+                        <Button.Template>
+                            <ControlTemplate TargetType="Button">
+                                <Border Background="Transparent" CornerRadius="6">
+                                    <TextBlock Text="🐟" FontSize="13" FontFamily="Segoe UI Emoji"
+                                               HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                </Border>
+                            </ControlTemplate>
+                        </Button.Template>
+                    </Button>
+
+                    <!-- 今日休假快捷开关 -->
+                    <Button Grid.Column="7" Width="24" Height="24" Cursor="Hand"
+                            Visibility="{Binding ShowLeisureButtons, Converter={StaticResource BoolToVis}}"
+                            Background="Transparent" BorderThickness="0" Margin="2,0,0,0"
+                            Foreground="#E5E5EA"
+                            ToolTip="今日休假（停止计费）" Click="Beach_Click">
+                        <Button.Template>
+                            <ControlTemplate TargetType="Button">
+                                <Border Background="Transparent" CornerRadius="6">
+                                    <TextBlock Text="🏖️" FontSize="13" FontFamily="Segoe UI Emoji"
+                                               HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                </Border>
+                            </ControlTemplate>
+                        </Button.Template>
+                    </Button>
+
+                    <!-- 撤回误触下班 -->
+                    <Button Grid.Column="8" Height="24" Padding="6,0" Margin="4,0,0,0" Cursor="Hand"
+                            Visibility="{Binding IsOffDuty, Converter={StaticResource BoolToVis}}"
+                            Background="#2230D158" BorderThickness="0"
+                            ToolTip="手滑了 / 继续搬砖" Click="UndoOffDuty_Click">
+                        <TextBlock Text="↩️ 手滑了" FontSize="10" Foreground="#30D158" />
+                    </Button>
+
+                    <!-- 老板夺命 Call -->
+                    <Button Grid.Column="9" Height="24" Padding="6,0" Margin="4,0,0,0" Cursor="Hand"
+                            Visibility="{Binding ShowEmergencyCallButton, Converter={StaticResource BoolToVis}}"
+                            Background="#33FF453A" BorderThickness="0"
+                            ToolTip="老板夺命Call · 被迫营业" Click="TriggerEmergencyCall_Click">
+                        <TextBlock Text="🚨 Call" FontSize="10" Foreground="#FF8A80" />
+                    </Button>
+                </Grid>
+
+                <!-- 暗语伪装内容：PLC / Excel；保留一个低调的摸鱼按钮 -->
+                <Grid Margin="16,0,10,0"
+                      Visibility="{Binding IsCamouflage, Converter={StaticResource BoolToVis}}">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+
+                    <TextBlock Text="{Binding CamouflageText}"
+                               FontFamily="{StaticResource MonoFont}" FontSize="10.5"
+                               VerticalAlignment="Center"
+                               Foreground="#30D158"
+                               TextTrimming="CharacterEllipsis" />
+
+                    <Button x:Name="CamoFishButton" Grid.Column="1" Width="24" Height="24" Cursor="Hand"
+                            Background="Transparent" BorderThickness="0"
+                            ToolTip="{Binding IslandFishToolTip}" Click="Fish_Click">
+                        <Button.Template>
+                            <ControlTemplate TargetType="Button">
+                                <Border Background="#22FFFFFF" CornerRadius="6">
+                                    <Grid>
+                                        <TextBlock Text="🐟" FontSize="12" FontFamily="Segoe UI Emoji"
+                                                   Opacity="0.9"
+                                                   HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                        <Ellipse Width="4" Height="4" Fill="{Binding IslandFishBrush}"
+                                                 HorizontalAlignment="Right" VerticalAlignment="Top"
+                                                 Margin="0,3,3,0" />
+                                    </Grid>
+                                </Border>
+                            </ControlTemplate>
+                        </Button.Template>
+                    </Button>
+                </Grid>
+
+                <!-- 夺命 Call 血红警报层：放在伪装层之上，警报优先级最高 -->
+                <Grid x:Name="EmergencyLayer" Width="520" Height="44"
+                      Background="#FF3A0A0A"
+                      Visibility="{Binding IsEmergencyCall, Converter={StaticResource BoolToVis}}">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Text="🚨" FontFamily="Segoe UI Emoji" FontSize="13"
+                               Foreground="#FF8A80" VerticalAlignment="Center"
+                               Margin="14,0,5,0" />
+                    <TextBlock Grid.Column="1" Text="{Binding EmergencyIslandText}"
+                               FontFamily="{StaticResource MonoFont}" FontSize="10.5"
+                               Foreground="#FFE0E0" VerticalAlignment="Center"
+                               Margin="0,0,8,0" TextTrimming="CharacterEllipsis" />
+                    <Button Grid.Column="2" Height="26" Margin="0,0,12,0"
+                            Padding="8,0" Cursor="Hand" BorderThickness="0"
+                            Click="EndEmergencyCall_Click">
+                        <Button.Template>
+                            <ControlTemplate TargetType="Button">
+                                <Border Background="#FF453A" CornerRadius="13" Padding="8,0">
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Text="🛑" FontFamily="Segoe UI Emoji" FontSize="12"
+                                                   VerticalAlignment="Center" />
+                                        <TextBlock Text=" 放我走" FontSize="11" Foreground="White"
+                                                   VerticalAlignment="Center" />
+                                    </StackPanel>
+                                </Border>
+                            </ControlTemplate>
+                        </Button.Template>
+                    </Button>
+                </Grid>
+            </Grid>
+            <Grid x:Name="MiniLayer" Opacity="1">
+                <Border Width="8" Height="8" CornerRadius="4"
+                        HorizontalAlignment="Center" VerticalAlignment="Center"
+                        Background="{Binding IslandMiniDotBrush}" />
+            </Grid>
+
+            <!-- 义务加班的红色呼吸描边 -->
+            <Border x:Name="OvertimeGlow" CornerRadius="22" BorderThickness="2"
+                    BorderBrush="#FF453A" IsHitTestVisible="False">
+                <Border.Effect>
+                    <DropShadowEffect Color="#FF453A" BlurRadius="20" ShadowDepth="0" Opacity="0.9" />
+                </Border.Effect>
+                <Border.Style>
+                    <Style TargetType="Border">
+                        <Setter Property="Opacity" Value="0" />
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding IsOvertime}" Value="True">
+                                <DataTrigger.EnterActions>
+                                    <BeginStoryboard x:Name="IslandBreath">
+                                        <Storyboard RepeatBehavior="Forever" AutoReverse="True">
+                                            <DoubleAnimation Storyboard.TargetProperty="Opacity"
+                                                             From="0.15" To="0.9" Duration="0:0:0.7" />
+                                        </Storyboard>
+                                    </BeginStoryboard>
+                                </DataTrigger.EnterActions>
+                                <DataTrigger.ExitActions>
+                                    <StopStoryboard BeginStoryboardName="IslandBreath" />
+                                </DataTrigger.ExitActions>
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </Border.Style>
+            </Border>
+
+            <!-- 临时提醒的闪烁层 -->
+            <Border x:Name="FlashBorder" CornerRadius="22" BorderThickness="2"
+                    BorderBrush="#30D158" Opacity="0" IsHitTestVisible="False" />
+
+            <!-- 临时提醒文字（覆盖胶囊内容，8 秒后自动消失） -->
+            <Border x:Name="NoticeLayer" Width="520" Height="44"
+                    HorizontalAlignment="Right" VerticalAlignment="Top"
+                    CornerRadius="22" Background="#F21C1C1E"
+                    Visibility="Collapsed" IsHitTestVisible="False">
+                <TextBlock x:Name="NoticeText" FontSize="11" Foreground="#F2F2F7"
+                           Margin="16,0" VerticalAlignment="Center"
+                           TextTrimming="CharacterEllipsis" />
+            </Border>
+        </Grid>
+    </Border>
+</Window>

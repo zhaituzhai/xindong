@@ -1,0 +1,66 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    薪动 XinDong —— 纯 .NET 8 WPF 绿色便携工程
+    硬性约束：
+      1. 目标框架 net8.0-windows；
+      2. 仅使用 WPF + WinForms（系统托盘 NotifyIcon）+ BCL，无任何 NuGet 包引用；
+      3. 生成的 exe 同级目录存放 xindong_config.json / xindong_ledger.json，随文件夹迁移。
+  -->
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <UseWindowsForms>true</UseWindowsForms>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <RootNamespace>XinDong</RootNamespace>
+    <AssemblyName>XinDong</AssemblyName>
+    <Version>1.0.0</Version>
+    <AssemblyVersion>1.0.0.0</AssemblyVersion>
+    <FileVersion>1.0.0.0</FileVersion>
+    <Product>薪动 XinDong</Product>
+    <Company>XinDong</Company>
+    <Description>实时计薪 · 带薪摸鱼 · 义务加班扎心账本</Description>
+    <NeutralLanguage>zh-Hans</NeutralLanguage>
+    <SatelliteResourceLanguages>zh-Hans</SatelliteResourceLanguages>
+    <DebugType>embedded</DebugType>
+    <Deterministic>true</Deterministic>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>Assets\xindong.ico</ApplicationIcon>
+    <!-- WPF 的 DPI 感知由 app.manifest 声明，关闭 WinForms 分析器关于高 DPI 的提示 -->
+    <NoWarn>$(NoWarn);WFAC010</NoWarn>
+  </PropertyGroup>
+
+  <!--
+    UseWindowsForms 会通过隐式 using 注入 System.Windows.Forms / System.Drawing，
+    与 WPF 的 Application、Brush 等类型冲突。这里显式移除，托盘相关代码使用别名引用。
+  -->
+  <ItemGroup>
+    <Using Remove="System.Drawing" />
+    <Using Remove="System.Windows.Forms" />
+  </ItemGroup>
+
+  <!-- 内置节假日兜底数据：编进 exe，离线也能一键同步 -->
+  <ItemGroup>
+    <EmbeddedResource Include="Data\china_holidays.json" LogicalName="XinDong.Data.china_holidays.json" />
+    <Resource Include="Assets\xindong_icon_64.png" />
+  </ItemGroup>
+
+  <!--
+    本地运行配置 / 账本可能出现在工程根目录做测试；
+    绝不能把它们当作内容文件带进发布包，否则会覆盖用户真实数据。
+  -->
+  <ItemGroup>
+    <None Remove="xindong_*.json" />
+    <Content Remove="xindong_*.json" />
+  </ItemGroup>
+
+  <!-- 构建目录可能继承低完整性标签；发布的桌面程序需要普通用户完整性才能写入自己的启动项。 -->
+  <Target Name="NormalizePublishedExecutableIntegrity" AfterTargets="Publish"
+          Condition="'$(OS)' == 'Windows_NT' and Exists('$(PublishDir)$(AssemblyName).exe')">
+    <Exec Command="&quot;$(SystemRoot)\System32\icacls.exe&quot; &quot;$(PublishDir)$(AssemblyName).exe&quot; /setintegritylevel M" />
+  </Target>
+
+</Project>

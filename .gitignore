@@ -1,15 +1,17 @@
-# ===== xindong 应用端编译产物（源码路径预留，编译内容不上传）=====
-xindong/*.dll
-xindong/*.exe
-xindong/*.pdb
-xindong/*.xml
-xindong/*.cache
-xindong/XinDong.deps.json
-xindong/XinDong.runtimeconfig.json
-xindong/xindong_config.json
-xindong/xindong_ledger.json
-xindong/zh-Hans/
-xindong/.codeartsdoer/
+# ===== xindong-app 应用端（WPF .NET 8 桌面端）=====
+# 构建产物 / IDE 临时
+xindong-app/bin/
+xindong-app/obj/
+xindong-app/publish/
+xindong-app/.vs/
+# 便携版打包输出（dist/ 已被下方全局 dist/ 覆盖，这里显式再列一次 zip）
+xindong-app/dist/
+# 运行时生成的本地数据（绿色版落在 exe 同级，不上传）
+xindong-app/xindong_config.json
+xindong-app/xindong_ledger.json
+xindong-app/xindong_ledger.bak.*.json
+xindong-app/xindong_error.log
+xindong-app/.codeartsdoer/
 
 # ===== Python 运行时与构建产物 =====
 __pycache__/

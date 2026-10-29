@@ -1,0 +1,39 @@
+{
+  "Version": 1,
+  "Records": [
+    {
+      "Date": "2026-10-28",
+      "NormalEarned": 0.0,
+      "SlackingEarned": 0,
+      "OvertimeLoss": 0,
+      "EmergencyCallLoss": 0,
+      "EmergencyCallEarned": 0,
+      "EmergencyCallSeconds": 0,
+      "EmergencyCallCount": 0,
+      "EmergencyCallMode": "Unpaid",
+      "EmergencyCallRate": 0,
+      "EmergencyCallActive": false,
+      "EmergencyCallStartedAt": null,
+      "EmergencyCallEndedAt": null,
+      "EmergencyCallFixedSubsidy": 0,
+      "EmergencyCallHourlyRate": 0,
+      "RoundingLoss": 0,
+      "WorkedSeconds": 0,
+      "SlackingSeconds": 0,
+      "OvertimeSeconds": 0,
+      "LockedHourlyAmount": 0.0,
+      "SlackingCount": 0,
+      "RoundingLostSeconds": 0,
+      "IsHoliday": false,
+      "IsOffDuty": false,
+      "AutoFilled": false,
+      "ClockOutAt": null,
+      "HolidayOvertime": false,
+      "HolidayOvertimeStart": null,
+      "SlackingStartedAt": null,
+      "ActiveSlackingType": "Phone",
+      "SlackingStats": [],
+      "LastUpdated": "2026-10-28T16:16:13.9541112+08:00"
+    }
+  ]
+}

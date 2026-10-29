@@ -1,0 +1,443 @@
+﻿{
+  "TestedAt": "2026-10-29T08:40:37.2237549+08:00",
+  "Target": "C:\\Users\\LoNg\\AppData\\Local\\Temp\\XinDong-QA-20261029\\bin\\Probe\\release\\XinDong.dll",
+  "TargetSha256": "C96468C75E7A122D68B423BD7F620D027D5604E011EE162C02E819C274D99E51",
+  "Runtime": "8.0.13",
+  "Total": 72,
+  "Passed": 70,
+  "Failed": 2,
+  "Results": [
+    {
+      "Id": "PAY-01-monthly-D-H-rates",
+      "Pass": true,
+      "Expected": "7.5|208.3333|27.7778",
+      "Actual": "7.5|208.3333|27.7778"
+    },
+    {
+      "Id": "PAY-02-lunch-outside-shift",
+      "Pass": true,
+      "Expected": "9",
+      "Actual": "9"
+    },
+    {
+      "Id": "PAY-03-overlapping-lunch",
+      "Pass": true,
+      "Expected": "8",
+      "Actual": "8"
+    },
+    {
+      "Id": "PAY-04-no-lunch",
+      "Pass": true,
+      "Expected": "9",
+      "Actual": "9"
+    },
+    {
+      "Id": "PAY-05-locked-1199",
+      "Pass": true,
+      "Expected": "0",
+      "Actual": "0"
+    },
+    {
+      "Id": "PAY-05-locked-1200",
+      "Pass": true,
+      "Expected": "0",
+      "Actual": "0"
+    },
+    {
+      "Id": "PAY-05-locked-1799",
+      "Pass": true,
+      "Expected": "0",
+      "Actual": "0"
+    },
+    {
+      "Id": "PAY-05-locked-1800",
+      "Pass": true,
+      "Expected": "30",
+      "Actual": "30"
+    },
+    {
+      "Id": "PAY-05-locked-3599",
+      "Pass": true,
+      "Expected": "30",
+      "Actual": "30"
+    },
+    {
+      "Id": "PAY-05-locked-3600",
+      "Pass": true,
+      "Expected": "60",
+      "Actual": "60"
+    },
+    {
+      "Id": "PAY-06-wall-clock-08:00",
+      "Pass": true,
+      "Expected": "0",
+      "Actual": "0"
+    },
+    {
+      "Id": "PAY-06-wall-clock-11:00",
+      "Pass": true,
+      "Expected": "7200",
+      "Actual": "7200"
+    },
+    {
+      "Id": "PAY-06-wall-clock-12:30",
+      "Pass": true,
+      "Expected": "10800",
+      "Actual": "10800"
+    },
+    {
+      "Id": "PAY-06-wall-clock-14:00",
+      "Pass": true,
+      "Expected": "14400",
+      "Actual": "14400"
+    },
+    {
+      "Id": "PAY-06-wall-clock-20:00",
+      "Pass": true,
+      "Expected": "28800",
+      "Actual": "28800"
+    },
+    {
+      "Id": "PAY-07-monthly-cap",
+      "Pass": true,
+      "Expected": "200",
+      "Actual": "200"
+    },
+    {
+      "Id": "PAY-08-normal-overtime-stages",
+      "Pass": true,
+      "Expected": "210",
+      "Actual": "210"
+    },
+    {
+      "Id": "PAY-09-holiday-overtime-stages",
+      "Pass": true,
+      "Expected": "1140",
+      "Actual": "1140"
+    },
+    {
+      "Id": "PAY-10-custom-base",
+      "Pass": true,
+      "Expected": "15.2644",
+      "Actual": "15.2644"
+    },
+    {
+      "Id": "PAY-11-survival",
+      "Pass": true,
+      "Expected": "143.33",
+      "Actual": "143.33"
+    },
+    {
+      "Id": "PAY-12-rounding-warning-19",
+      "Pass": true,
+      "Expected": "false",
+      "Actual": "false"
+    },
+    {
+      "Id": "PAY-12-rounding-warning-20",
+      "Pass": true,
+      "Expected": "true",
+      "Actual": "true"
+    },
+    {
+      "Id": "PAY-12-rounding-warning-25",
+      "Pass": true,
+      "Expected": "true",
+      "Actual": "true"
+    },
+    {
+      "Id": "PAY-12-rounding-warning-29",
+      "Pass": true,
+      "Expected": "true",
+      "Actual": "true"
+    },
+    {
+      "Id": "PAY-12-rounding-warning-30",
+      "Pass": true,
+      "Expected": "false",
+      "Actual": "false"
+    },
+    {
+      "Id": "PAY-13-confirm-rounded",
+      "Pass": true,
+      "Expected": "0|25|1500",
+      "Actual": "0|25|1500"
+    },
+    {
+      "Id": "PAY-14-clockout-cancel",
+      "Pass": true,
+      "Expected": "false",
+      "Actual": "false"
+    },
+    {
+      "Id": "PAY-15-clockout-future-rejected",
+      "Pass": true,
+      "Expected": "false",
+      "Actual": "false"
+    },
+    {
+      "Id": "STATE-01-work-lunch-overtime",
+      "Pass": true,
+      "Expected": "Working|LunchBreak|Overtime",
+      "Actual": "Working|LunchBreak|Overtime"
+    },
+    {
+      "Id": "STATE-02-four-slacking-types",
+      "Pass": true,
+      "Expected": "4|4|40",
+      "Actual": "4|4|40"
+    },
+    {
+      "Id": "STATE-03-slack-15-minute-reminder-once",
+      "Pass": true,
+      "Expected": "1",
+      "Actual": "1"
+    },
+    {
+      "Id": "CALL-01-single-Unpaid",
+      "Pass": true,
+      "Expected": "120|0",
+      "Actual": "120|0"
+    },
+    {
+      "Id": "CALL-01-single-FixedSubsidy",
+      "Pass": true,
+      "Expected": "0|100",
+      "Actual": "0|100"
+    },
+    {
+      "Id": "CALL-01-single-HourlyRate",
+      "Pass": true,
+      "Expected": "0|90",
+      "Actual": "0|90"
+    },
+    {
+      "Id": "SCHED-01-D-values",
+      "Pass": true,
+      "Expected": "30|28|26|24|21.75",
+      "Actual": "30|28|26|24|21.75"
+    },
+    {
+      "Id": "SCHED-02-double-weekend",
+      "Pass": true,
+      "Expected": "true|false|false",
+      "Actual": "true|false|false"
+    },
+    {
+      "Id": "SCHED-03-big-small",
+      "Pass": true,
+      "Expected": "false|false|true|false",
+      "Actual": "false|false|true|false"
+    },
+    {
+      "Id": "SCHED-04-makeup-priority",
+      "Pass": true,
+      "Expected": "true",
+      "Actual": "true"
+    },
+    {
+      "Id": "SCHED-05-rest-quota",
+      "Pass": true,
+      "Expected": "4",
+      "Actual": "4"
+    },
+    {
+      "Id": "SCHED-06-business-day",
+      "Pass": true,
+      "Expected": "2026-10-27|2026-10-28",
+      "Actual": "2026-10-27|2026-10-28"
+    },
+    {
+      "Id": "SCHED-07-fallback-2026",
+      "Pass": true,
+      "Expected": "33|6",
+      "Actual": "33|6"
+    },
+    {
+      "Id": "SCHED-08-first-install-no-fake-history",
+      "Pass": true,
+      "Expected": "1",
+      "Actual": "1"
+    },
+    {
+      "Id": "SCHED-09-auto-fill-no-duplicates",
+      "Pass": true,
+      "Expected": "true",
+      "Actual": "true"
+    },
+    {
+      "Id": "SCHED-10-offline-fallback",
+      "Pass": true,
+      "Expected": "true|33|6",
+      "Actual": "true|33|6"
+    },
+    {
+      "Id": "SCHED-11-live-sync-with-fallback",
+      "Pass": true,
+      "Expected": "true|33|6",
+      "Actual": "true|33|6"
+    },
+    {
+      "Id": "STORE-01-config-roundtrip",
+      "Pass": true,
+      "Expected": "7000|ExcelCamouflage",
+      "Actual": "7000|ExcelCamouflage"
+    },
+    {
+      "Id": "STORE-02-ledger-roundtrip",
+      "Pass": true,
+      "Expected": "123.45|test",
+      "Actual": "123.45|test"
+    },
+    {
+      "Id": "STORE-03-corruption-backup",
+      "Pass": true,
+      "Expected": "42",
+      "Actual": "42"
+    },
+    {
+      "Id": "STORE-04-backup-retain-seven",
+      "Pass": true,
+      "Expected": "7",
+      "Actual": "7"
+    },
+    {
+      "Id": "STORE-05-CSV-bom-fields",
+      "Pass": true,
+      "Expected": "EFBBBF|16|2",
+      "Actual": "EFBBBF|16|2"
+    },
+    {
+      "Id": "BOARD-01-week-range",
+      "Pass": true,
+      "Expected": "2026-10-26|2026-11-01",
+      "Actual": "2026-10-26|2026-11-01"
+    },
+    {
+      "Id": "BOARD-02-leap-month",
+      "Pass": true,
+      "Expected": "2024-02-01|2024-02-29",
+      "Actual": "2024-02-01|2024-02-29"
+    },
+    {
+      "Id": "BOARD-03-aggregate-metrics",
+      "Pass": true,
+      "Expected": "200|130|1|2.5|25",
+      "Actual": "200|130|1|2.5|25"
+    },
+    {
+      "Id": "BOARD-04-navigation-and-detail",
+      "Pass": true,
+      "Expected": "12|7|42|12|9|1",
+      "Actual": "12|7|42|12|9|1"
+    },
+    {
+      "Id": "BOARD-05-range-export-filters",
+      "Pass": true,
+      "Expected": "2",
+      "Actual": "2"
+    },
+    {
+      "Id": "UI-01-dialog-construction",
+      "Pass": true,
+      "Expected": "true",
+      "Actual": "true"
+    },
+    {
+      "Id": "BUG-01-midnight-select-previous-evening",
+      "Pass": true,
+      "Expected": "23",
+      "Actual": "23"
+    },
+    {
+      "Id": "BUG-02-undo-exclusion-lost-on-final-clockout",
+      "Pass": true,
+      "Expected": "3600",
+      "Actual": "3600"
+    },
+    {
+      "Id": "BUG-03-undo-exclusion-lost-on-restart",
+      "Pass": false,
+      "Expected": "3600",
+      "Actual": "0"
+    },
+    {
+      "Id": "BUG-04-restart-slack-at-lunch-double-count",
+      "Pass": false,
+      "Expected": "3600",
+      "Actual": "1800"
+    },
+    {
+      "Id": "BUG-05-restart-slack-after-work-loses-gap",
+      "Pass": true,
+      "Expected": "3600",
+      "Actual": "3600"
+    },
+    {
+      "Id": "BUG-06-mixed-call-unpaid-then-paid-recalc",
+      "Pass": true,
+      "Expected": "120",
+      "Actual": "120"
+    },
+    {
+      "Id": "BUG-07-mixed-call-paid-then-unpaid-recalc",
+      "Pass": true,
+      "Expected": "120",
+      "Actual": "120"
+    },
+    {
+      "Id": "BUG-08-call-live-board-time",
+      "Pass": true,
+      "Expected": "01:00:00",
+      "Actual": "01:00:00"
+    },
+    {
+      "Id": "BUG-09-fractional-stage-30min",
+      "Pass": true,
+      "Expected": "75",
+      "Actual": "75"
+    },
+    {
+      "Id": "BUG-10-save-failure-must-not-show-success",
+      "Pass": true,
+      "Expected": "false",
+      "Actual": "false"
+    },
+    {
+      "Id": "BUG-11-negative-multiplier-rejected",
+      "Pass": true,
+      "Expected": "true",
+      "Actual": "true"
+    },
+    {
+      "Id": "BUG-12-first-install-unset-salary",
+      "Pass": true,
+      "Expected": "0",
+      "Actual": "0"
+    },
+    {
+      "Id": "BUG-13-restart-after-business-cutoff-finalizes-old-call",
+      "Pass": true,
+      "Expected": "false",
+      "Actual": "false"
+    },
+    {
+      "Id": "BUG-14-backdated-clockout-keeps-later-slack",
+      "Pass": true,
+      "Expected": "false",
+      "Actual": "false"
+    },
+    {
+      "Id": "BUG-15-autofill-hourly-fractional-shift-rounding",
+      "Pass": true,
+      "Expected": "420",
+      "Actual": "420"
+    },
+    {
+      "Id": "BUG-16-settings-shorter-shift-recomputes-worked-time",
+      "Pass": true,
+      "Expected": "3600",
+      "Actual": "3600"
+    }
+  ]
+}

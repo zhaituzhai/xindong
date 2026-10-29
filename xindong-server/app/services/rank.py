@@ -6,10 +6,10 @@ from app import db
 from app.timeutil import today_str, week_dates, iso, parse_dt, now
 
 REST_D = {
-    "None": 30.0,
-    "Monthly2": 28.0,
-    "Monthly4": 26.0,
-    "BigSmall": 24.0,
+    "NoRest": 30.0,
+    "Rest2Days": 28.0,
+    "Rest4Days": 26.0,
+    "BigSmallWeek": 24.0,
     "DoubleWeekend": 21.75,
 }
 
@@ -43,6 +43,34 @@ def _d_from_config(cfg: dict) -> float:
     return REST_D.get(str(cfg.get("RestSystem") or ""), 21.75)
 
 
+def _parse_hhmm(s) -> float | None:
+    if not s:
+        return None
+    try:
+        h, m = str(s).split(":")
+        v = int(h) + int(m) / 60.0
+        return v if 0 <= v < 24 else None
+    except Exception:
+        return None
+
+
+def _standard_hours(cfg: dict) -> float:
+    """复刻 app UserConfig.ComputedStandardHours：下班-上班-重叠午休，异常回退旧 StandardHours。"""
+    start = _parse_hhmm(cfg.get("WorkStart"))
+    end = _parse_hhmm(cfg.get("WorkEnd"))
+    if start is None or end is None or end <= start:
+        return max(0.5, float(cfg.get("StandardHours") or 8))
+    hours = end - start
+    ls = _parse_hhmm(cfg.get("LunchStart"))
+    le = _parse_hhmm(cfg.get("LunchEnd"))
+    if ls is not None and le is not None and le > ls:
+        ov_s = max(ls, start)
+        ov_e = min(le, end)
+        if ov_e > ov_s:
+            hours -= ov_e - ov_s
+    return max(0.5, round(hours, 4))
+
+
 def _survival_cost(cfg: dict) -> float:
     rent = float(cfg.get("MonthlyRent") or 0)
     daily = float(cfg.get("DailyCommuteFood") or 0)
@@ -53,7 +81,7 @@ def _standard_hourly(cfg: dict) -> float:
     mode = cfg.get("SalaryMode")
     amount = float(cfg.get("SalaryAmount") or 0)
     d = _d_from_config(cfg)
-    h = float(cfg.get("StandardHours") or 8) or 8
+    h = _standard_hours(cfg)
     if mode == "Monthly":
         daily_salary = amount / d if d else 0
         return daily_salary / h if h else 0
@@ -65,7 +93,7 @@ def _daily_salary(cfg: dict) -> float:
     d = _d_from_config(cfg)
     if cfg.get("SalaryMode") == "Monthly":
         return amount / d if d else 0
-    h = float(cfg.get("StandardHours") or 8) or 8
+    h = _standard_hours(cfg)
     return amount * h
 
 
@@ -84,7 +112,7 @@ def _rec_metrics(rec: dict, cfg: dict) -> dict[str, float]:
     net = normal - survival - ot_loss - rd_loss - em_loss
 
     std_hourly = _standard_hourly(cfg)
-    h = float(cfg.get("StandardHours") or 8) or 8
+    h = _standard_hours(cfg)
     ot_hours = ot_sec / 3600.0
     daily_sal = _daily_salary(cfg)
     actual_hourly = daily_sal / (h + ot_hours) if (h + ot_hours) > 0 else 0

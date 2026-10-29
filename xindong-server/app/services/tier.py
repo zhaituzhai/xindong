@@ -8,11 +8,11 @@ from app.services import rank
 
 def _daily_salary(cfg: dict) -> float:
     amount = float(cfg.get("SalaryAmount") or 0)
-    rest_d = {"None": 30.0, "Monthly2": 28.0, "Monthly4": 26.0, "BigSmall": 24.0, "DoubleWeekend": 21.75}
+    rest_d = {"NoRest": 30.0, "Rest2Days": 28.0, "Rest4Days": 26.0, "BigSmallWeek": 24.0, "DoubleWeekend": 21.75}
     d = rest_d.get(str(cfg.get("RestSystem") or ""), 21.75)
     if cfg.get("SalaryMode") == "Monthly":
         return amount / d if d else 0
-    h = float(cfg.get("StandardHours") or 8) or 8
+    h = rank._standard_hours(cfg)
     return amount * h
 
 

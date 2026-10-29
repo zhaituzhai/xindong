@@ -8,7 +8,7 @@ import httpx
 
 API = "http://127.0.0.1:8770"
 
-REST_SYSTEMS = ["DoubleWeekend", "BigSmall", "Monthly4", "Monthly2", "None"]
+REST_SYSTEMS = ["DoubleWeekend", "BigSmallWeek", "Rest4Days", "Rest2Days", "NoRest"]
 NICKNAMES = ["卷王", "摸鱼大师", "加班侠", "穷鬼", "白嫖之王", "按时下班", "夺命Call常客",
              "身价暴跌", "抹零达人", "全勤标兵", "老六", "打工魂", "搬砖工", "咸鱼", "奋斗逼"]
 
@@ -47,7 +47,7 @@ def gen_config(i: int) -> dict:
 
 def gen_record(d: date, cfg: dict) -> dict:
     salary = cfg["SalaryAmount"]
-    rest_d = {"None": 30.0, "Monthly2": 28.0, "Monthly4": 26.0, "BigSmall": 24.0, "DoubleWeekend": 21.75}
+    rest_d = {"NoRest": 30.0, "Rest2Days": 28.0, "Rest4Days": 26.0, "BigSmallWeek": 24.0, "DoubleWeekend": 21.75}
     dd = rest_d.get(cfg["RestSystem"], 21.75)
     daily_salary = salary / dd
     h = cfg["StandardHours"]

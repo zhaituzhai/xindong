@@ -32,6 +32,8 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
 
 	public const int PageSettings = 3;
 
+	public const int PageRank = 4;
+
 	private static readonly Brush BrushBlue = MakeBrush("#007AFF");
 
 	private static readonly Brush BrushBlueSoft = MakeSoftBrush("#007AFF");
@@ -811,6 +813,9 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
 
 	public int CurrentPageIndex => _page;
 
+	/// <summary>当前内存账本（供上报读取最新数据）。</summary>
+	public Ledger CurrentLedger => _ledger;
+
 	public bool IsPageToday => _page == 0;
 
 	public bool IsPageBoard => _page == 1;
@@ -818,6 +823,8 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
 	public bool IsPageLedger => _page == 2;
 
 	public bool IsPageSettings => _page == 3;
+
+	public bool IsPageRank => _page == 4;
 
 	public ViewMode CurrentViewMode => _viewMode;
 
@@ -1467,6 +1474,17 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
 	public event Func<EmergencyCallOptions?>? EmergencyCallOptionsRequested;
 
 	public event Func<ClockOutTimeContext, DateTime?>? ClockOutTimeRequested;
+
+	/// <summary>关键数据变更后请求上报后端（App 层接 ReportScheduler.ReportNowAsync）。</summary>
+	public event Action? ReportNeeded;
+
+	/// <summary>排行页 ViewModel，由 App 在启用加入排行时注入；未加入时为 null。</summary>
+	public RankViewModel? Rank
+	{
+		get => _rank;
+		set { _rank = value; OnPropertyChanged(); }
+	}
+	private RankViewModel? _rank;
 
 	public event PropertyChangedEventHandler? PropertyChanged;
 
@@ -3094,12 +3112,13 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
 
 	public void SetPage(int index)
 	{
-		_page = Math.Clamp(index, 0, 3);
+		_page = Math.Clamp(index, 0, 4);
 		OnPropertyChanged("CurrentPageIndex");
 		OnPropertyChanged("IsPageToday");
 		OnPropertyChanged("IsPageBoard");
 		OnPropertyChanged("IsPageLedger");
 		OnPropertyChanged("IsPageSettings");
+		OnPropertyChanged("IsPageRank");
 		if (_page == 1)
 		{
 			RefreshBoard();
@@ -3107,6 +3126,10 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
 		if (_page == 2)
 		{
 			RefreshHistory();
+		}
+		if (_page == 4)
+		{
+			_ = _rank?.RefreshAsync();
 		}
 	}
 
@@ -3970,6 +3993,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
 		SettingsMessage = "✅ 已保存并立即生效（" + DateTime.Now.ToString("HH:mm:ss", CultureInfo.InvariantCulture) + "）" + ((num > 0) ? $"；已重算 {num} 条历史加班记录" : string.Empty);
 		UpdateSettingsPreview();
 		RaiseAll();
+		ReportNeeded?.Invoke();
 	}
 
 	public void SaveSalaryOnly()
@@ -3991,6 +4015,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
 		_forceRefresh = true;
 		SettingsMessage = "✅ 薪资已保存并立即生效（" + DateTime.Now.ToString("HH:mm:ss", CultureInfo.InvariantCulture) + "）" + ((num > 0) ? $"；已重算 {num} 条加班记录" : string.Empty);
 		RaiseAll();
+		ReportNeeded?.Invoke();
 	}
 
 	private int RecalculateAllOvertimeLosses()

@@ -241,6 +241,11 @@
                                              Command="{Binding SetPageCommand}" CommandParameter="2" />
                                 <RadioButton Style="{StaticResource NavRadio}"
                                              GroupName="nav"
+                                             Content="🏆 排行"
+                                             IsChecked="{Binding IsPageRank, Mode=OneWay}"
+                                             Command="{Binding SetPageCommand}" CommandParameter="4" />
+                                <RadioButton Style="{StaticResource NavRadio}"
+                                             GroupName="nav"
                                              Content="⚙️ 设置"
                                              IsChecked="{Binding IsPageSettings, Mode=OneWay}"
                                              Command="{Binding SetPageCommand}" CommandParameter="3" />
@@ -1720,6 +1725,36 @@
                                     </StackPanel>
                                 </Border>
 
+                                <!-- 云端排行 -->
+                                <Border Style="{StaticResource Card}" Margin="0,14,0,0">
+                                    <StackPanel>
+                                        <TextBlock Text="☁️ 云端排行" Style="{StaticResource H2}" />
+                                        <CheckBox Content="加入排行（上报数据参与日 / 周榜对比）"
+                                                  Style="{StaticResource ChipCheckBox}"
+                                                  IsChecked="{Binding Config.JoinLeaderboard, Mode=TwoWay}"
+                                                  Margin="0,10,0,0" />
+                                        <Grid Margin="0,10,0,0">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="10" />
+                                                <ColumnDefinition Width="*" />
+                                            </Grid.ColumnDefinitions>
+                                            <StackPanel>
+                                                <TextBlock Text="服务器地址" Style="{StaticResource Caption}" Margin="2,0,0,4" />
+                                                <TextBox Style="{StaticResource InputBox}"
+                                                         Text="{Binding Config.ServerBaseUrl, Mode=TwoWay}" />
+                                            </StackPanel>
+                                            <StackPanel Grid.Column="2">
+                                                <TextBlock Text="花名（榜单展示用）" Style="{StaticResource Caption}" Margin="2,0,0,4" />
+                                                <TextBox Style="{StaticResource InputBox}"
+                                                         Text="{Binding Config.Nickname, Mode=TwoWay}" />
+                                            </StackPanel>
+                                        </Grid>
+                                        <TextBlock Text="开启后将在保存设置 / 退出时上报数据；离线时静默降级为纯本地，不阻断任何功能。花名留空则榜单显示设备号前 6 位。"
+                                                   Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="2,8,0,0" />
+                                    </StackPanel>
+                                </Border>
+
                                 <!-- 保存条 -->
                                 <Border Style="{StaticResource Card}" Margin="0,14,0,0">
                                     <Grid>
@@ -1752,6 +1787,88 @@
                                 </Border>
                             </StackPanel>
                         </ScrollViewer>
+
+                        <!-- ============ 页面 5：排行 ============ -->
+                        <Grid Visibility="{Binding IsPageRank, Converter={StaticResource BoolToVis}}">
+                            <ScrollViewer VerticalScrollBarVisibility="Auto"
+                                          HorizontalScrollBarVisibility="Disabled">
+                                <StackPanel Margin="26,20,26,24">
+                                    <Grid>
+                                        <StackPanel>
+                                            <TextBlock Text="🏆 排行" Style="{StaticResource H1}" />
+                                            <TextBlock Text="{Binding Rank.StatusText}" Style="{StaticResource Caption}"
+                                                       Margin="0,4,0,0" />
+                                        </StackPanel>
+                                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
+                                            <Border Background="{StaticResource NavBgBrush}" CornerRadius="9" Padding="3">
+                                                <StackPanel Orientation="Horizontal">
+                                                    <RadioButton Style="{StaticResource SegRadio}" GroupName="rankscope"
+                                                                 Content="📅 日"
+                                                                 IsChecked="{Binding Rank.IsScopeDaily, Mode=OneWay}"
+                                                                 Command="{Binding Rank.SetScopeCommand}" CommandParameter="daily" />
+                                                    <RadioButton Style="{StaticResource SegRadio}" GroupName="rankscope"
+                                                                 Content="📊 周"
+                                                                 IsChecked="{Binding Rank.IsScopeWeekly, Mode=OneWay}"
+                                                                 Command="{Binding Rank.SetScopeCommand}" CommandParameter="weekly" />
+                                                </StackPanel>
+                                            </Border>
+                                            <Button Content="🔄 刷新" Style="{StaticResource GhostButton}" Margin="10,0,0,0"
+                                                    Command="{Binding Rank.RefreshCommand}" />
+                                        </StackPanel>
+                                    </Grid>
+
+                                    <StackPanel Margin="0,14,0,0">
+                                        <TextBlock Text="指标" Style="{StaticResource Caption}" Margin="2,0,0,4" />
+                                        <ComboBox Style="{StaticResource InputCombo}"
+                                                  ItemsSource="{Binding Rank.Metrics}"
+                                                  DisplayMemberPath="Label"
+                                                  SelectedItem="{Binding Rank.SelectedMetric, Mode=TwoWay}" />
+                                    </StackPanel>
+
+                                    <Border Style="{StaticResource Card}" Margin="0,14,0,0">
+                                        <TextBlock Text="{Binding Rank.MyRankText}" FontFamily="{StaticResource MonoFont}"
+                                                   FontSize="18" FontWeight="Bold"
+                                                   Foreground="{StaticResource AccentBrush}" />
+                                    </Border>
+
+                                    <Border Style="{StaticResource Card}" Margin="0,12,0,0">
+                                        <ItemsControl ItemsSource="{Binding Rank.Entries}">
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate>
+                                                    <Grid Margin="0,5">
+                                                        <Grid.ColumnDefinitions>
+                                                            <ColumnDefinition Width="56" />
+                                                            <ColumnDefinition Width="*" />
+                                                            <ColumnDefinition Width="Auto" />
+                                                        </Grid.ColumnDefinitions>
+                                                        <TextBlock Grid.Column="0" VerticalAlignment="Center">
+                                                            <TextBlock.Style>
+                                                                <Style TargetType="TextBlock">
+                                                                    <Setter Property="FontFamily" Value="{StaticResource MonoFont}" />
+                                                                    <Setter Property="FontSize" Value="14" />
+                                                                    <Setter Property="FontWeight" Value="Bold" />
+                                                                    <Setter Property="Text" Value="{Binding Rank, StringFormat='No. {0}'}" />
+                                                                    <Style.Triggers>
+                                                                        <DataTrigger Binding="{Binding IsMe}" Value="True">
+                                                                            <Setter Property="Foreground" Value="{StaticResource AccentBrush}" />
+                                                                        </DataTrigger>
+                                                                    </Style.Triggers>
+                                                                </Style>
+                                                            </TextBlock.Style>
+                                                        </TextBlock>
+                                                        <TextBlock Grid.Column="1" Text="{Binding Nickname}" FontSize="13"
+                                                                   VerticalAlignment="Center" Margin="8,0,0,0" />
+                                                        <TextBlock Grid.Column="2" VerticalAlignment="Center" FontSize="11"
+                                                                   Foreground="{StaticResource TextSecondaryBrush}"
+                                                                   Text="{Binding DiffToTop, StringFormat='差榜首 {0:F1}'}" />
+                                                    </Grid>
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                    </Border>
+                                </StackPanel>
+                            </ScrollViewer>
+                        </Grid>
                     </Grid>
                 </Grid>
             </Grid>

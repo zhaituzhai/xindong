@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.IO;
 using System.Threading;
+using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Input;
 using XinDong.Models;
@@ -24,6 +25,10 @@ public partial class App : Application
     private DynamicIslandWindow _island = null!;
     private TrayIconService _tray = null!;
     private HotKeyService _hotkey = null!;
+
+    private DeviceIdService? _deviceSvc;
+    private ApiService? _api;
+    private ReportScheduler? _reportScheduler;
 
     private bool _bossActive;
     private bool _wasMainVisible;
@@ -92,6 +97,32 @@ public partial class App : Application
         }
 
         _vm = new MainViewModel(_storage, config, ledger);
+
+        // 后端集成：仅在用户开启「加入排行」时创建 ApiService，否则纯单机零网络
+        _deviceSvc = new DeviceIdService(_storage.BaseDirectory);
+        if (config.JoinLeaderboard)
+        {
+            _api = new ApiService(_deviceSvc);
+            var identity = _deviceSvc.LoadOrCreate();
+            identity.ServerBaseUrl = config.ServerBaseUrl;
+            _deviceSvc.Save(identity);
+            _reportScheduler = new ReportScheduler(_api, _deviceSvc, _storage.BaseDirectory,
+                () => _vm.Config, () => _vm.CurrentLedger);
+            _vm.ReportNeeded += () => _ = _reportScheduler.ReportNowAsync();
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    await _api.EnsureRegisteredAsync(identity, _vm.Config, _vm.CurrentLedger);
+                    _reportScheduler.Start();
+                }
+                catch
+                {
+                    // 注册失败静默，本地继续可用
+                }
+            });
+        }
+        _vm.Rank = new RankViewModel(_api, _deviceSvc, _storage.BaseDirectory, () => _vm.Config);
 
         // 记住 B1/B2 的伪装外观：没有激活老板键时也恢复上次选择的展示状态
         if (!config.BossKeyActive && config.BossKeyMode != BossKeyMode.Stealth)
@@ -551,6 +582,15 @@ public partial class App : Application
             // 退出时保存失败不阻塞退出
         }
 
+        try
+        {
+            _reportScheduler?.FlushAsync().Wait(TimeSpan.FromSeconds(3));
+        }
+        catch
+        {
+            // 退出时上报失败忽略
+        }
+
         _hotkey?.Dispose();
         _tray?.Dispose();
 
@@ -584,6 +624,17 @@ public partial class App : Application
             // 忽略
         }
 
+        try
+        {
+            _reportScheduler?.FlushAsync().Wait(TimeSpan.FromSeconds(3));
+        }
+        catch
+        {
+            // 忽略
+        }
+
+        _api?.Dispose();
+        _reportScheduler?.Dispose();
         _hotkey?.Dispose();
         _tray?.Dispose();
         _mutex?.Dispose();

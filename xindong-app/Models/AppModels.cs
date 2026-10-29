@@ -390,6 +390,15 @@ public sealed class UserConfig
     /// <summary>关闭主窗口时是否收进托盘（默认 true）。</summary>
     public bool CloseToTray { get; set; } = true;
 
+    /// <summary>是否加入云端排行：开启后上报数据并拉取榜单，关闭时纯单机（默认关，尊重隐私）。</summary>
+    public bool JoinLeaderboard { get; set; }
+
+    /// <summary>后端服务地址，自部署用户可在设置页修改。</summary>
+    public string ServerBaseUrl { get; set; } = "http://localhost:8770";
+
+    /// <summary>排行花名（榜单展示用），未绑定则为空。</summary>
+    public string Nickname { get; set; } = string.Empty;
+
     /// <summary>
     /// 每日标准有效工时 H：由「上班 / 下班 / 午休」自动折算，不再手填。
     /// 计算方式：下班 - 上班 - 与工作区间重叠的午休时长；异常输入时回退到旧值。

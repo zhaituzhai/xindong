@@ -108,12 +108,13 @@ public partial class App : Application
             _deviceSvc.Save(identity);
             _reportScheduler = new ReportScheduler(_api, _deviceSvc, _storage.BaseDirectory,
                 () => _vm.Config, () => _vm.CurrentLedger);
-            _vm.ReportNeeded += () => _ = _reportScheduler.ReportNowAsync();
+            _vm.ReportNeeded += () => _ = OnReportNeededAsync();
             _ = Task.Run(async () =>
             {
                 try
                 {
                     await _api.EnsureRegisteredAsync(identity, _vm.Config, _vm.CurrentLedger);
+                    await SyncNicknameAsync(identity);
                     _reportScheduler.Start();
                 }
                 catch
@@ -414,6 +415,25 @@ public partial class App : Application
         {
             EnterBossMode();
         }
+    }
+
+    /// <summary>保存设置触发：全量上报 + 同步花名。</summary>
+    private async Task OnReportNeededAsync()
+    {
+        if (_reportScheduler is null || _api is null || _deviceSvc is null) return;
+        await _reportScheduler.ReportNowAsync();
+        var identity = _deviceSvc.LoadOrCreate();
+        await SyncNicknameAsync(identity);
+    }
+
+    /// <summary>本地有花名且后端未绑定时，调 /bind/nickname 同步。</summary>
+    private async Task SyncNicknameAsync(DeviceIdentity identity)
+    {
+        if (_api is null) return;
+        var local = _vm.Config.Nickname;
+        if (string.IsNullOrWhiteSpace(local)) return;
+        if (string.Equals(identity.Nickname, local, StringComparison.Ordinal)) return;
+        await _api.BindNicknameAsync(identity, local);
     }
 
     /// <summary>进入老板键模式。</summary>

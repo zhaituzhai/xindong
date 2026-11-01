@@ -45,6 +45,13 @@ public sealed class DeviceIdService
         else File.Move(tmp, _path);
     }
 
+    /// <summary>删除身份文件并清空缓存（注销时调用，下次 LoadOrCreate 会重新生成指纹）。</summary>
+    public void Clear()
+    {
+        _cache = null;
+        try { if (File.Exists(_path)) File.Delete(_path); } catch { }
+    }
+
     private DeviceIdentity? TryLoad()
     {
         if (!File.Exists(_path)) return null;

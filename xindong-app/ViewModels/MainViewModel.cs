@@ -1385,6 +1385,8 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
 
 	public ICommand SaveSalaryOnlyCommand { get; }
 
+	public ICommand LogoutCommand { get; }
+
 	public ICommand ToggleBossKeyCommand { get; }
 
 	public ICommand MinimizeToIslandCommand { get; }
@@ -1477,6 +1479,12 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
 
 	/// <summary>关键数据变更后请求上报后端（App 层接 ReportScheduler.ReportNowAsync）。</summary>
 	public event Action? ReportNeeded;
+
+	/// <summary>用户开启「加入排行」并保存时触发，App 层动态初始化后端（热切换，无需重启）。</summary>
+	public event Action? JoinLeaderboardRequested;
+
+	/// <summary>用户点击「退出排行」时触发，App 层注销后端、清除设备身份、停止上报。</summary>
+	public event Action? LogoutRequested;
 
 	/// <summary>排行页 ViewModel，由 App 在启用加入排行时注入；未加入时为 null。</summary>
 	public RankViewModel? Rank
@@ -1634,6 +1642,10 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
 		SaveSalaryOnlyCommand = new RelayCommand((object? _) =>
 		{
 			SaveSalaryOnly();
+		});
+		LogoutCommand = new RelayCommand((object? _) =>
+		{
+			LogoutRequested?.Invoke();
 		});
 		ToggleBossKeyCommand = new RelayCommand((object? _) =>
 		{
@@ -2697,6 +2709,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
 		RefreshHistory();
 		CommandManager.InvalidateRequerySuggested();
 		RaiseAll();
+		ReportNeeded?.Invoke();
 	}
 
 	public void UndoOffDuty()
@@ -2723,6 +2736,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
 			RefreshHistory();
 			CommandManager.InvalidateRequerySuggested();
 			RaiseAll();
+			ReportNeeded?.Invoke();
 		}
 	}
 
@@ -2859,6 +2873,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
 			_emergencyOptions = new EmergencyCallOptions();
 			_offAtNotified = true;
 			Transition(WorkState.OffDuty);
+			ReportNeeded?.Invoke();
 		}
 	}
 
@@ -2922,6 +2937,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
 			CommandManager.InvalidateRequerySuggested();
 			Persist();
 			RaiseAll();
+			ReportNeeded?.Invoke();
 		}
 	}
 
@@ -3994,6 +4010,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
 		UpdateSettingsPreview();
 		RaiseAll();
 		ReportNeeded?.Invoke();
+		if (Config.JoinLeaderboard) JoinLeaderboardRequested?.Invoke();
 	}
 
 	public void SaveSalaryOnly()

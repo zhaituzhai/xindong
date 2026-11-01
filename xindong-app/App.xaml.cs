@@ -98,32 +98,13 @@ public partial class App : Application
 
         _vm = new MainViewModel(_storage, config, ledger);
 
-        // 后端集成：仅在用户开启「加入排行」时创建 ApiService，否则纯单机零网络
+        // 后端集成：Rank 始终创建（未加入时 api=null 显示引导）；加入排行时初始化后端服务
         _deviceSvc = new DeviceIdService(_storage.BaseDirectory);
-        if (config.JoinLeaderboard)
-        {
-            _api = new ApiService(_deviceSvc);
-            var identity = _deviceSvc.LoadOrCreate();
-            identity.ServerBaseUrl = config.ServerBaseUrl;
-            _deviceSvc.Save(identity);
-            _reportScheduler = new ReportScheduler(_api, _deviceSvc, _storage.BaseDirectory,
-                () => _vm.Config, () => _vm.CurrentLedger);
-            _vm.ReportNeeded += () => _ = OnReportNeededAsync();
-            _ = Task.Run(async () =>
-            {
-                try
-                {
-                    await _api.EnsureRegisteredAsync(identity, _vm.Config, _vm.CurrentLedger);
-                    await SyncNicknameAsync(identity);
-                    _reportScheduler.Start();
-                }
-                catch
-                {
-                    // 注册失败静默，本地继续可用
-                }
-            });
-        }
         _vm.Rank = new RankViewModel(_api, _deviceSvc, _storage.BaseDirectory, () => _vm.Config);
+        _vm.ReportNeeded += () => _ = OnReportNeededAsync();
+        _vm.JoinLeaderboardRequested += EnsureBackendInitialized;
+        _vm.LogoutRequested += OnLogoutRequested;
+        if (config.JoinLeaderboard) EnsureBackendInitialized();
 
         // 记住 B1/B2 的伪装外观：没有激活老板键时也恢复上次选择的展示状态
         if (!config.BossKeyActive && config.BossKeyMode != BossKeyMode.Stealth)
@@ -417,6 +398,33 @@ public partial class App : Application
         }
     }
 
+    /// <summary>动态初始化后端集成（幂等）：创建 ApiService/ReportScheduler 并注册。热切换加入排行时调用。</summary>
+    private void EnsureBackendInitialized()
+    {
+        if (_api is not null) return;
+        if (!_vm.Config.JoinLeaderboard) return;
+        _api = new ApiService(_deviceSvc!);
+        var identity = _deviceSvc!.LoadOrCreate();
+        identity.ServerBaseUrl = _vm.Config.ServerBaseUrl;
+        _deviceSvc.Save(identity);
+        _reportScheduler = new ReportScheduler(_api, _deviceSvc, _storage.BaseDirectory,
+            () => _vm.Config, () => _vm.CurrentLedger);
+        _vm.Rank?.AttachApi(_api);
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await _api.EnsureRegisteredAsync(identity, _vm.Config, _vm.CurrentLedger);
+                await SyncNicknameAsync(identity);
+                _reportScheduler.Start();
+            }
+            catch
+            {
+                // 注册失败静默，本地继续可用
+            }
+        });
+    }
+
     /// <summary>保存设置触发：全量上报 + 同步花名。</summary>
     private async Task OnReportNeededAsync()
     {
@@ -434,6 +442,40 @@ public partial class App : Application
         if (string.IsNullOrWhiteSpace(local)) return;
         if (string.Equals(identity.Nickname, local, StringComparison.Ordinal)) return;
         await _api.BindNicknameAsync(identity, local);
+    }
+
+    /// <summary>退出排行：注销后端 → 清除设备身份 → 停止上报 → 关闭加入排行开关。</summary>
+    private void OnLogoutRequested()
+    {
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                if (_api is not null && _deviceSvc is not null)
+                {
+                    var identity = _deviceSvc.LoadOrCreate();
+                    if (!string.IsNullOrEmpty(identity.Token))
+                        await _api.LogoutAsync(identity);
+                }
+            }
+            catch
+            {
+                // 注销失败不阻断本地清理
+            }
+
+            _reportScheduler?.Dispose();
+            _reportScheduler = null;
+            _api?.Dispose();
+            _api = null;
+            _deviceSvc?.Clear();
+
+            _ = _main.Dispatcher.BeginInvoke(() =>
+            {
+                _vm.Rank?.DetachApi();
+                _vm.Config.JoinLeaderboard = false;
+                _storage.SaveConfig(_vm.Config);
+            });
+        });
     }
 
     /// <summary>进入老板键模式。</summary>

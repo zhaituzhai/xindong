@@ -83,3 +83,34 @@ public sealed class MyMetricPosition
     [JsonPropertyName("absolute")] public double? Absolute { get; set; }
     [JsonPropertyName("percentile")] public double? Percentile { get; set; }
 }
+/// <summary>我的段位（/tier/me 响应）。</summary>
+public sealed class TierInfo
+{
+    [JsonPropertyName("tier")] public string? Tier { get; set; }
+    [JsonPropertyName("score")] public double Score { get; set; }
+    [JsonPropertyName("prev_tier")] public string? PrevTier { get; set; }
+    [JsonPropertyName("week")] public string? Week { get; set; }
+}
+
+/// <summary>今日挑战信息。</summary>
+public sealed class ChallengeInfo
+{
+    [JsonPropertyName("day")] public string Day { get; set; } = string.Empty;
+    [JsonPropertyName("kind")] public string Kind { get; set; } = string.Empty;
+    [JsonPropertyName("description")] public string Description { get; set; } = string.Empty;
+}
+
+/// <summary>挑战达成榜单行。</summary>
+public sealed class ChallengeAchievedEntry
+{
+    [JsonPropertyName("device_id")] public string? DeviceId { get; set; }
+    [JsonPropertyName("achieved_at")] public string? AchievedAt { get; set; }
+    [JsonPropertyName("nickname")] public string? Nickname { get; set; }
+}
+
+/// <summary>/challenge/today 响应。</summary>
+public sealed class ChallengeTodayResponse
+{
+    [JsonPropertyName("challenge")] public ChallengeInfo? Challenge { get; set; }
+    [JsonPropertyName("achieved")] public List<ChallengeAchievedEntry> Achieved { get; set; } = new();
+}

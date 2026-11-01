@@ -27,7 +27,7 @@ public sealed class RankViewModel : INotifyPropertyChanged
         Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping
     };
 
-    private readonly ApiService? _api;
+    private ApiService? _api;
     private readonly DeviceIdService _device;
     private readonly Func<UserConfig> _getConfig;
     private readonly string _cachePath;
@@ -57,6 +57,11 @@ public sealed class RankViewModel : INotifyPropertyChanged
     private string _statusText = "未加入排行";
     private bool _isLoading;
     private string _myRankText = "";
+    private string _tierText = "";
+    private string _tierScoreText = "";
+    private string _prevTierText = "";
+    private string _tierDistributionText = "";
+    private string _challengeDescription = "";
 
     public RankViewModel(ApiService? api, DeviceIdService device, string baseDirectory, Func<UserConfig> getConfig)
     {
@@ -104,8 +109,64 @@ public sealed class RankViewModel : INotifyPropertyChanged
         set { _myRankText = value; OnPropertyChanged(); }
     }
 
+    public string TierText
+    {
+        get => _tierText;
+        set { _tierText = value; OnPropertyChanged(); }
+    }
+
+    public string TierScoreText
+    {
+        get => _tierScoreText;
+        set { _tierScoreText = value; OnPropertyChanged(); }
+    }
+
+    public string PrevTierText
+    {
+        get => _prevTierText;
+        set { _prevTierText = value; OnPropertyChanged(); }
+    }
+
+    public string TierDistributionText
+    {
+        get => _tierDistributionText;
+        set { _tierDistributionText = value; OnPropertyChanged(); }
+    }
+
+    public string ChallengeDescription
+    {
+        get => _challengeDescription;
+        set { _challengeDescription = value; OnPropertyChanged(); OnPropertyChanged(nameof(HasChallenge)); }
+    }
+
+    public bool HasChallenge => !string.IsNullOrEmpty(_challengeDescription);
+
+    public ObservableCollection<ChallengeAchievedEntry> ChallengeAchieved { get; } = new();
+
     public ICommand RefreshCommand { get; }
     public ICommand SetScopeCommand { get; }
+
+    /// <summary>热切换加入排行时，App 层注入 ApiService 并刷新榜单。</summary>
+    public void AttachApi(ApiService api)
+    {
+        _api = api;
+        _ = RefreshAsync();
+    }
+
+    /// <summary>退出排行时，App 层调用以清空 api 引用和所有云端展示。</summary>
+    public void DetachApi()
+    {
+        _api = null;
+        Entries.Clear();
+        ChallengeAchieved.Clear();
+        MyRankText = "";
+        TierText = "";
+        TierScoreText = "";
+        PrevTierText = "";
+        TierDistributionText = "";
+        ChallengeDescription = "";
+        StatusText = "未加入排行（在设置页开启）";
+    }
 
     public async Task RefreshAsync()
     {
@@ -115,6 +176,12 @@ public sealed class RankViewModel : INotifyPropertyChanged
             StatusText = "未加入排行（在设置页开启）";
             Entries.Clear();
             MyRankText = "";
+            TierText = "";
+            TierScoreText = "";
+            PrevTierText = "";
+            TierDistributionText = "";
+            ChallengeDescription = "";
+            ChallengeAchieved.Clear();
             return;
         }
 
@@ -148,6 +215,35 @@ public sealed class RankViewModel : INotifyPropertyChanged
             MyRankText = pos.Rank is int r ? $"我：第 {r} / {pos.Total} 名" : "我：未上榜";
         else
             MyRankText = "";
+
+        await RefreshTierAndChallengeAsync(identity);
+    }
+
+    /// <summary>拉取段位 + 全服分布 + 今日挑战（与榜单同页展示）。</summary>
+    private async Task RefreshTierAndChallengeAsync(DeviceIdentity identity)
+    {
+        var tier = await _api!.GetMyTierAsync(identity);
+        TierText = tier?.Tier is string t && !string.IsNullOrEmpty(t) ? t : "未定级";
+        TierScoreText = tier is not null && tier.Score != 0 ? $"段位分 {tier.Score:F1}" : "";
+        PrevTierText = tier?.PrevTier is string p && !string.IsNullOrEmpty(p) ? $"上周：{p}" : "";
+
+        var dist = await _api!.GetTierDistributionAsync(identity);
+        if (dist is not null && dist.Count > 0)
+            TierDistributionText = string.Join(" · ", dist.Select(kv => $"{kv.Key} {kv.Value}"));
+        else
+            TierDistributionText = "";
+
+        var ch = await _api!.GetChallengeTodayAsync(identity);
+        ChallengeAchieved.Clear();
+        if (ch?.Challenge is not null && !string.IsNullOrEmpty(ch.Challenge.Description))
+        {
+            ChallengeDescription = ch.Challenge.Description;
+            foreach (var a in ch.Achieved) ChallengeAchieved.Add(a);
+        }
+        else
+        {
+            ChallengeDescription = "";
+        }
     }
 
     private void SaveCache(LeaderboardResponse resp)

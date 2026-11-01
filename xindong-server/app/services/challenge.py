@@ -95,9 +95,10 @@ def check_achieved(device_id: str, day: str | None = None) -> bool:
         normal = rec.get("NormalEarned") or 0
         survival = (cfg.get("MonthlyRent") or 0) / 30.0 + (cfg.get("DailyCommuteFood") or 0)
         net = normal - survival - (rec.get("OvertimeLoss") or 0) - (rec.get("RoundingLoss") or 0) - (rec.get("EmergencyCallLoss") or 0)
-        rest_d = {"None": 30.0, "Monthly2": 28.0, "Monthly4": 26.0, "BigSmall": 24.0, "DoubleWeekend": 21.75}
+        rest_d = {"NoRest": 30.0, "Rest2Days": 28.0, "Rest4Days": 26.0, "BigSmallWeek": 24.0, "DoubleWeekend": 21.75}
         d = rest_d.get(str(cfg.get("RestSystem") or ""), 21.75)
-        daily_sal = (cfg.get("SalaryAmount") or 0) / d if cfg.get("SalaryMode") == "Monthly" else (cfg.get("SalaryAmount") or 0) * (cfg.get("StandardHours") or 8)
+        from app.services import rank
+        daily_sal = (cfg.get("SalaryAmount") or 0) / d if cfg.get("SalaryMode") == "Monthly" else (cfg.get("SalaryAmount") or 0) * rank._standard_hours(cfg)
         achieved = daily_sal > 0 and net >= daily_sal * threshold / 100.0
     elif kind == "net_over_median_pct":
         normal = rec.get("NormalEarned") or 0

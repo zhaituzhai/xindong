@@ -6,6 +6,35 @@
 
 ---
 
+## 实施状态汇总
+
+| 节 | 内容 | 状态 |
+|---|---|---|
+| 一 | 现状与目标 | ✅ 文档 |
+| 二 | 后端接口清单 | ✅ 已对接 |
+| 三 | 登录流程 | ✅ 已实施（`DeviceIdService`/`EnsureRegisteredAsync`/花名同步） |
+| 四 | 数据上报 | ✅ 已实施（`ApiService`/`ReportScheduler` + 下班/夺命Call/撤回/节假日加班事件触发） |
+| 五 | 拉取榜单 | ✅ 已实施（`RankViewModel`/排行页/缓存） |
+| 六 | 改造清单 | ✅ 已实施 |
+| 七 | 决策点 | ✅ 已定稿 |
+| 八 | 风险与兼容 | — 文档 |
+| 九 | 实施顺序 | 第 1-4 步 ✅ / 第 5 步联调 ⏳ |
+
+**已完成**：
+- ✅ `Models/ApiModels.cs`（后端 DTO）、`Services/DeviceIdService.cs`（设备指纹）、`Services/ApiService.cs`（HTTP 骨架）、`Services/ReportScheduler.cs`（上报调度）
+- ✅ `ViewModels/RankViewModel.cs` + 排行页 UI（`MainWindow.xaml` 第 5 页）
+- ✅ `UserConfig` 增 `JoinLeaderboard`/`ServerBaseUrl`/`Nickname` + 设置页「☁️ 云端排行」卡片
+- ✅ `App.xaml.cs` 启动注册 + 退出 flush + 花名同步（`SyncNicknameAsync`）
+- ✅ `MainViewModel` 加 `PageRank`/`ReportNeeded` 事件/`Rank` 属性；`SaveSettings`/`SaveSalaryOnly` 触发上报
+- ✅ 编译通过（.NET 10 SDK）、端到端验证：注册成功 + 花名同步 + 段位结算
+
+**待办（下一阶段）**：
+- ✅ 下班/夺命Call/撤回下班/节假日加班 事件触发上报（`PerformClockOutAt`/`UndoOffDuty`/`FinalizeEmergency`/`StartHolidayOvertime` 末尾 `ReportNeeded?.Invoke()`）
+- ✅ 运行时热切换加入排行（`JoinLeaderboardRequested` 事件 + `EnsureBackendInitialized` 幂等初始化 + `RankViewModel.AttachApi`，无需重启）
+- ⏳ 联调边界：离线降级、token 失效重注册、限流
+
+---
+
 ## 一、现状与目标
 
 ### 现状

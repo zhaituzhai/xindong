@@ -244,5 +244,96 @@ public sealed class ApiService : IDisposable
             EventType = "report"
         };
 
+    // ---------- 段位 ----------
+
+    /// <summary>拉取我的段位（需 Bearer）。返回 tier/score/prev_tier/week。</summary>
+    public async Task<TierInfo?> GetMyTierAsync(DeviceIdentity identity, CancellationToken ct = default)
+    {
+        if (string.IsNullOrEmpty(identity.Token)) return null;
+        try
+        {
+            using var req = new HttpRequestMessage(HttpMethod.Get,
+                $"{identity.ServerBaseUrl}/api/v1/tier/me");
+            req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", identity.Token);
+            using var resp = await _http.SendAsync(req, ct);
+            if (!resp.IsSuccessStatusCode) return null;
+            var body = await resp.Content.ReadAsStringAsync(ct);
+            return JsonSerializer.Deserialize<TierInfo>(body, JsonOpts);
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    /// <summary>拉取全服段位分布（无需 auth）。返回 段位名 → 人数。</summary>
+    public async Task<Dictionary<string, int>?> GetTierDistributionAsync(
+        DeviceIdentity identity, CancellationToken ct = default)
+    {
+        try
+        {
+            using var req = new HttpRequestMessage(HttpMethod.Get,
+                $"{identity.ServerBaseUrl}/api/v1/tier/distribution");
+            using var resp = await _http.SendAsync(req, ct);
+            if (!resp.IsSuccessStatusCode) return null;
+            var body = await resp.Content.ReadAsStringAsync(ct);
+            using var doc = JsonDocument.Parse(body);
+            var result = new Dictionary<string, int>();
+            if (doc.RootElement.TryGetProperty("distribution", out var dist))
+                foreach (var prop in dist.EnumerateObject())
+                    result[prop.Name] = prop.Value.GetInt32();
+            return result;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    // ---------- 挑战 ----------
+
+    /// <summary>拉取今日挑战 + 达成榜（无需 auth）。</summary>
+    public async Task<ChallengeTodayResponse?> GetChallengeTodayAsync(
+        DeviceIdentity identity, CancellationToken ct = default)
+    {
+        try
+        {
+            using var req = new HttpRequestMessage(HttpMethod.Get,
+                $"{identity.ServerBaseUrl}/api/v1/challenge/today");
+            using var resp = await _http.SendAsync(req, ct);
+            if (!resp.IsSuccessStatusCode) return null;
+            var body = await resp.Content.ReadAsStringAsync(ct);
+            return JsonSerializer.Deserialize<ChallengeTodayResponse>(body, JsonOpts);
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    // ---------- 注销 ----------
+
+    /// <summary>退出排行：删除后端所有数据（需 Bearer，body {confirm:true}）。成功返回 true。</summary>
+    public async Task<bool> LogoutAsync(DeviceIdentity identity, CancellationToken ct = default)
+    {
+        if (string.IsNullOrEmpty(identity.Token)) return false;
+        try
+        {
+            var body = JsonSerializer.Serialize(new { confirm = true }, JsonOpts);
+            using var req = new HttpRequestMessage(HttpMethod.Post,
+                $"{identity.ServerBaseUrl}/api/v1/logout")
+            {
+                Content = new StringContent(body, Encoding.UTF8, "application/json")
+            };
+            req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", identity.Token);
+            using var resp = await _http.SendAsync(req, ct);
+            return resp.IsSuccessStatusCode;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
     public void Dispose() => _http.Dispose();
 }

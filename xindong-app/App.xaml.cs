@@ -414,7 +414,10 @@ public partial class App : Application
         {
             try
             {
-                await _api.EnsureRegisteredAsync(identity, _vm.Config, _vm.CurrentLedger);
+                var state = await _api.EnsureRegisteredAsync(identity, _vm.Config, _vm.CurrentLedger);
+                if (state != RegistrationState.Registered) return;
+                // 启动/加入排行时先立即全量上报一次，避免面板要等 2 分钟心跳才显示在线。
+                await _api.ReportAsync(identity, _vm.Config, _vm.CurrentLedger);
                 await SyncNicknameAsync(identity);
                 _reportScheduler.Start();
             }

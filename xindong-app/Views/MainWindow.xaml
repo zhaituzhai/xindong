@@ -1319,13 +1319,13 @@
                                                         <TextBlock Text="上班时间" Style="{StaticResource Caption}" Margin="2,0,0,4" />
                                                         <TextBox Style="{StaticResource InputBox}"
                                                                  LostFocus="TimeField_LostFocus"
-                                                                 Text="{Binding Config.WorkStart, Mode=TwoWay}" />
+                                                                 Text="{Binding SettingsWorkStart, Mode=TwoWay}" />
                                                     </StackPanel>
                                                     <StackPanel Grid.Column="2">
                                                         <TextBlock Text="下班时间" Style="{StaticResource Caption}" Margin="2,0,0,4" />
                                                         <TextBox Style="{StaticResource InputBox}"
                                                                  LostFocus="TimeField_LostFocus"
-                                                                 Text="{Binding Config.WorkEnd, Mode=TwoWay}" />
+                                                                 Text="{Binding SettingsWorkEnd, Mode=TwoWay}" />
                                                     </StackPanel>
                                                 </Grid>
                                                 <TextBlock Text="业务日切 = 上班时间 − 1 小时；跨 00:00 的通宵加班 / 夺命Call 会持续累计，到日切点才封账。"
@@ -1342,13 +1342,13 @@
                                                         <TextBlock Text="午休开始" Style="{StaticResource Caption}" Margin="2,0,0,4" />
                                                         <TextBox Style="{StaticResource InputBox}"
                                                                  LostFocus="TimeField_LostFocus"
-                                                                 Text="{Binding Config.LunchStart, Mode=TwoWay}" />
+                                                                 Text="{Binding SettingsLunchStart, Mode=TwoWay}" />
                                                     </StackPanel>
                                                     <StackPanel Grid.Column="2">
                                                         <TextBlock Text="午休结束" Style="{StaticResource Caption}" Margin="2,0,0,4" />
                                                         <TextBox Style="{StaticResource InputBox}"
                                                                  LostFocus="TimeField_LostFocus"
-                                                                 Text="{Binding Config.LunchEnd, Mode=TwoWay}" />
+                                                                 Text="{Binding SettingsLunchEnd, Mode=TwoWay}" />
                                                     </StackPanel>
                                                 </Grid>
 

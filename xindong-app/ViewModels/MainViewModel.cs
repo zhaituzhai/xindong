@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 #pragma warning disable CS8600, CS8619
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
@@ -173,6 +173,22 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
 	private bool _isHolidaySyncing;
 
 	private string _settingsMessage = string.Empty;
+
+	private string _settingsWorkStart = "09:00";
+
+	private string _settingsWorkEnd = "18:00";
+
+	private string _settingsLunchStart = "12:00";
+
+	private string _settingsLunchEnd = "13:00";
+
+	private string _initialWorkStart = "09:00";
+
+	private string _initialWorkEnd = "18:00";
+
+	private string _initialLunchStart = "12:00";
+
+	private string _initialLunchEnd = "13:00";
 
 	private string _hotkeyStatusText = "全局老板键：Alt + Z（等待注册结果…）";
 
@@ -1273,6 +1289,51 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
 
 	public bool HasSettingsMessage => !string.IsNullOrWhiteSpace(_settingsMessage);
 
+	// 设置页的时间输入先写草稿；只有 SaveSettings 校验通过才写回运行中的 Config。
+	public string SettingsWorkStart
+	{
+		get => _settingsWorkStart;
+		set
+		{
+			if (_settingsWorkStart == value) return;
+			_settingsWorkStart = value;
+			OnPropertyChanged("SettingsWorkStart");
+		}
+	}
+
+	public string SettingsWorkEnd
+	{
+		get => _settingsWorkEnd;
+		set
+		{
+			if (_settingsWorkEnd == value) return;
+			_settingsWorkEnd = value;
+			OnPropertyChanged("SettingsWorkEnd");
+		}
+	}
+
+	public string SettingsLunchStart
+	{
+		get => _settingsLunchStart;
+		set
+		{
+			if (_settingsLunchStart == value) return;
+			_settingsLunchStart = value;
+			OnPropertyChanged("SettingsLunchStart");
+		}
+	}
+
+	public string SettingsLunchEnd
+	{
+		get => _settingsLunchEnd;
+		set
+		{
+			if (_settingsLunchEnd == value) return;
+			_settingsLunchEnd = value;
+			OnPropertyChanged("SettingsLunchEnd");
+		}
+	}
+
 	public string HotkeyStatusText => _hotkeyStatusText;
 
 	public bool WorkMon
@@ -1519,6 +1580,14 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
 		_storage = storage;
 		Config = config;
 		_ledger = ledger;
+		_settingsWorkStart = config.WorkStart;
+		_settingsWorkEnd = config.WorkEnd;
+		_settingsLunchStart = config.LunchStart;
+		_settingsLunchEnd = config.LunchEnd;
+		_initialWorkStart = config.WorkStart;
+		_initialWorkEnd = config.WorkEnd;
+		_initialLunchStart = config.LunchStart;
+		_initialLunchEnd = config.LunchEnd;
 		_sessionDate = BusinessDate(DateTime.Now);
 		_hadHistory = _ledger.Records.Count > 0;
 		if (!Config.FirstRunDate.HasValue)
@@ -1801,22 +1870,23 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
 	private void OnTick(object? sender, EventArgs e)
 	{
 		DateTime now = DateTime.Now;
-		if (BusinessDate(now) != _sessionDate)
+		DateTime previousTick = _lastTick;
+		if (BusinessDate(now) > _sessionDate)
 		{
 			RollToNewDay(now);
 		}
-		double num = (now - _lastTick).TotalSeconds;
 		_lastTick = now;
-		if (double.IsNaN(num) || num < 0.0)
-		{
-			num = 0.0;
-		}
-		if (num > 30.0)
-		{
-			num = 30.0;
-		}
 		ReconcileTimeAxis(now);
-		UpdateState(now, num);
+		if (_slacking)
+		{
+			DateTime gapFrom = (_today.SlackingStartedAt is DateTime startedAt && startedAt > previousTick)
+				? startedAt
+				: previousTick;
+			AddSlackingGap(gapFrom, now);
+		}
+		// ReconcileTimeAxis 已经按真实时钟写好 WorkedSeconds / OvertimeSeconds；
+		// 这里不再重复加 delta，避免每次 tick 瞬时多算。
+		UpdateState(now, 0.0);
 		CheckReminders(now);
 		if (IsOvertime && (now - _lastQuoteAt).TotalSeconds >= 8.0)
 		{
@@ -1843,6 +1913,46 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
 		{
 			RefreshBoard();
 		}
+	}
+
+	/// <summary>
+	/// 按一条记录自身的下班时间和 Call 会话重算加班，不依赖 _today。
+	/// 普通加班只看第一次正常下班；Call 之后的空档不计入普通加班。
+	/// </summary>
+	private void RecomputeSettled(DailyRecord record, DateTime businessDate)
+	{
+		EnsureEmergencySessions(record);
+		double emergencySeconds = record.EmergencyCallSessions.Sum((EmergencyCallSession s) => Math.Max(0.0, s.Seconds));
+		record.EmergencyCallSeconds = emergencySeconds;
+		record.EmergencyCallLoss = EmergencyLossFromSessions(record, businessDate);
+		record.EmergencyCallEarned = record.EmergencyCallSessions.Sum((EmergencyCallSession s) => s.Earned);
+		record.EmergencyCallCount = record.EmergencyCallSessions.Count;
+
+		bool holiday = !Config.IsWorkday(businessDate);
+		DateTime? regularClockOut = record.RegularClockOutAt ?? record.ClockOutAt;
+		double regularSeconds;
+		if (regularClockOut.HasValue)
+		{
+			if (holiday)
+			{
+				regularSeconds = record.HolidayOvertimeStart is DateTime holidayStart
+					? Math.Max(0.0, (regularClockOut.Value - holidayStart).TotalSeconds)
+					: 0.0;
+			}
+			else
+			{
+				DateTime workEnd = At(businessDate, Config.WorkEnd);
+				regularSeconds = Math.Max(0.0, (regularClockOut.Value - workEnd).TotalSeconds);
+			}
+			regularSeconds = Math.Max(0.0, regularSeconds - Math.Max(0.0, record.OvertimeExcludedSeconds));
+		}
+		else
+		{
+			regularSeconds = Math.Max(0.0, record.OvertimeSeconds - emergencySeconds - Math.Max(0.0, record.OvertimeExcludedSeconds));
+		}
+
+		record.OvertimeSeconds = regularSeconds + emergencySeconds;
+		record.OvertimeLoss = OvertimeLossFor(regularSeconds, holiday) + record.EmergencyCallLoss;
 	}
 
 	private void UpdateState(DateTime now, double delta)
@@ -2117,7 +2227,8 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
 		{
 			SlackingSession last = merged.LastOrDefault();
 			bool sameBurst = last != null && last.Type == session.Type &&
-				(last.End.HasValue && session.Start <= last.End.Value.AddSeconds(2.0));
+				last.End.HasValue && session.End.HasValue &&
+				(session.Start <= last.End.Value.AddSeconds(2.0));
 			if (sameBurst && last != null)
 			{
 				last!.End = (session.End ?? last.End);
@@ -2438,6 +2549,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
 		if (!(totalSeconds <= 0.0))
 		{
 			_today.SlackingSeconds += totalSeconds;
+			_slackSessionSeconds += totalSeconds;
 			SlackingSession activeGapSession = _today.SlackingSessions.LastOrDefault((SlackingSession s) => !s.End.HasValue);
 			if (activeGapSession == null)
 			{
@@ -2569,6 +2681,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
 			return;
 		}
 		DateTime now = DateTime.Now;
+		DateTime sessionDateAtOpen = _sessionDate;
 		DateTime dateTime = (_holidayOvertime ? _holidayStart : At(_sessionDate, Config.WorkStart));
 		DateTime dateTime2 = At(_sessionDate, Config.WorkEnd);
 		ClockOutTimeContext arg = new ClockOutTimeContext
@@ -2626,6 +2739,11 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
 					return;
 				}
 			}
+		}
+		if (_sessionDate != sessionDateAtOpen)
+		{
+			SettingsMessage = "❌ 时间选择期间已跨过业务日切点，请重新确认下班。";
+			return;
 		}
 		PerformClockOutAt(valueOrDefault);
 	}
@@ -2693,6 +2811,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
 		_slackSessionSeconds = 0.0;
 		_today.WorkedSeconds = num;
 		_today.ClockOutAt = clockOutAt;
+		_today.RegularClockOutAt ??= clockOutAt;
 		_today.IsOffDuty = true;
 		_today.AutoFilled = false;
 		_today.RoundingLoss = 0m;
@@ -2717,6 +2836,24 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
 		if (CanUndoOffDuty)
 		{
 			DateTime now = DateTime.Now;
+			DateTime? oldClockOut = _today.ClockOutAt;
+			DateTime? holidayStart = _today.HolidayOvertimeStart;
+			DateTime workEnd = At(_sessionDate, Config.WorkEnd);
+			if (oldClockOut.HasValue)
+			{
+				DateTime baseline = holidayStart ?? workEnd;
+				double overtimeGap = Math.Max(0.0,
+					(Math.Max(now.Ticks, baseline.Ticks) - Math.Max(oldClockOut.Value.Ticks, baseline.Ticks)) /
+					(double)TimeSpan.TicksPerSecond);
+				_today.OvertimeExcludedSeconds += overtimeGap;
+			}
+			if (_today.EmergencyCallSessions.Count == 0)
+			{
+				// 没有 Call 时，撤回后的普通加班从撤回时刻重新起算；
+				// 上面的空档秒数会把 oldClockOut → now 这段扣掉。
+				_today.RegularClockOutAt = now;
+			}
+
 			_offDuty = false;
 			_today.IsOffDuty = false;
 			_today.ClockOutAt = null;
@@ -2725,6 +2862,11 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
 			_today.RoundingLostSeconds = 0.0;
 			_today.LockedHourlyAmount = 0m;
 			_today.SlackingStartedAt = null;
+			if (holidayStart.HasValue)
+			{
+				_holidayOvertime = true;
+				_holidayStart = holidayStart.Value;
+			}
 			_offAtNotified = true;
 			_lastTick = now;
 			double num = CalculateWallClockWorkedSeconds(now);
@@ -2790,6 +2932,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
 				DateTime? clockOutAt2 = valueOrDefault;
 				today.ClockOutAt = clockOutAt2;
 			}
+			_today.RegularClockOutAt ??= valueOrDefault;
 			_emergency = true;
 			_emergencyStart = now;
 			_emergencyOptions = options;
@@ -2809,6 +2952,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
 			RefreshBoard();
 			CommandManager.InvalidateRequerySuggested();
 			RaiseAll();
+			ReportNeeded?.Invoke();
 		}
 	}
 
@@ -2822,6 +2966,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
 			RefreshHistory();
 			CommandManager.InvalidateRequerySuggested();
 			RaiseAll();
+			ReportNeeded?.Invoke();
 		}
 	}
 
@@ -2872,10 +3017,11 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
 			_emergencySeconds = 0.0;
 			_emergencyOptions = new EmergencyCallOptions();
 			_offAtNotified = true;
+			RecomputeSettled(_today, _sessionDate);
 			Transition(WorkState.OffDuty);
-			ReportNeeded?.Invoke();
 		}
-	}
+				ReportNeeded?.Invoke();
+}
 
 	private void UpdateEmergency(DateTime now)
 	{
@@ -2913,6 +3059,22 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
 
 	public void SetTodayOff(bool off)
 	{
+		var now = DateTime.Now;
+		if (off)
+		{
+			_today.TodayOffStartedAt ??= now;
+		}
+		else if (_today.TodayOffStartedAt is DateTime startedAt)
+		{
+			double gap = Math.Max(0.0, (now - startedAt).TotalSeconds);
+			gap -= OverlapSeconds(startedAt, now, At(_sessionDate, Config.LunchStart), At(_sessionDate, Config.LunchEnd));
+			gap = Math.Max(0.0, gap);
+			_wallClockExcludedSeconds += gap;
+			_today.WallClockExcludedSeconds += gap;
+			_today.OvertimeExcludedSeconds += gap;
+			_today.TodayOffStartedAt = null;
+		}
+
 		Config.TodayOff = off;
 		Config.TodayOffDate = (off ? TodayKey : string.Empty);
 		if (off && _slacking)
@@ -2920,6 +3082,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
 			StopSlackingInternal();
 		}
 		_storage.SaveConfig(Config);
+		Persist();
 		_forceRefresh = true;
 		CommandManager.InvalidateRequerySuggested();
 		RaiseAll();
@@ -2930,16 +3093,16 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
 		if (CanHolidayOvertime)
 		{
 			_holidayOvertime = true;
-			_holidayStart = DateTime.Now;
+			_holidayStart = _today.HolidayOvertimeStart ?? DateTime.Now;
 			_today.HolidayOvertime = true;
 			_today.HolidayOvertimeStart = _holidayStart;
 			_forceRefresh = true;
 			CommandManager.InvalidateRequerySuggested();
 			Persist();
 			RaiseAll();
-			ReportNeeded?.Invoke();
 		}
-	}
+				ReportNeeded?.Invoke();
+}
 
 	public void ToggleBossKey()
 	{
@@ -2980,16 +3143,26 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
 		bool num = _state == WorkState.Overtime || _emergency || _holidayOvertime;
 		if (_emergency)
 		{
-			FinalizeEmergency(now);
+			DateTime callCutoff = At(_sessionDate, Config.WorkStart).AddDays(1.0).AddHours(-1.0);
+			FinalizeEmergency(callCutoff < now ? callCutoff : now);
 		}
 		_today.SlackingStartedAt = null;
 		_today.ActiveSlackingType = _slackType;
 		FinalizeDay();
+		DateTime previousDate = _sessionDate;
+		DateTime previousWorkEnd = At(previousDate, Config.WorkEnd);
 		if (!_today.IsOffDuty)
 		{
 			_today.IsOffDuty = true;
-			_today.ClockOutAt = now;
+			// 睡眠跨过日切时，旧记录不能把第二天的唤醒时间当作自己的下班时间。
+			_today.ClockOutAt = now <= previousWorkEnd ? now : previousWorkEnd;
+			_today.RegularClockOutAt ??= _today.ClockOutAt;
 		}
+		else
+		{
+			_today.RegularClockOutAt ??= _today.ClockOutAt;
+		}
+		RecomputeSettled(_today, previousDate);
 		if (Config.SalaryMode == SalaryMode.Monthly || _offDuty)
 		{
 			_today.NormalEarned = TodayEarned;
@@ -3011,10 +3184,13 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
 		_forceRefresh = true;
 		_today.IsOffDuty = false;
 		_today.IsHoliday = !IsWorkday(_sessionDate);
+		TryAutoCloseMissedCurrentDay(now);
+		RestoreTodayState(now);
 		Persist();
 		RefreshBoard();
 		RefreshHistory();
 		RaiseAll();
+		ReportNeeded?.Invoke();
 		if (num)
 		{
 			AlertRequested?.Invoke("⚠\ufe0f 已通宵至新工作日前 1 小时", "已自动为您结算封存昨日账本！\n新的一天从待打卡开始，通宵的工时与亏损都已完整保留在昨天。");
@@ -3074,25 +3250,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
 		}
 		if (_today.ClockOutAt is DateTime clockOut && BusinessDate(clockOut) == _sessionDate)
 		{
-			bool holiday = !IsWorkday(_sessionDate);
-			EnsureEmergencySessions(_today);
-			_today.EmergencyCallSeconds = _today.EmergencyCallSessions.Sum((EmergencyCallSession s) => Math.Max(0.0, s.Seconds));
-			_today.EmergencyCallLoss = EmergencyLossFromSessions(_today, _sessionDate);
-			if (holiday && _today.HolidayOvertimeStart is DateTime holidayStart)
-			{
-				_today.OvertimeSeconds = Math.Max(0.0, (clockOut - holidayStart).TotalSeconds);
-			}
-			else if (holiday)
-			{
-				_today.OvertimeSeconds = 0.0;
-			}
-			else
-			{
-				DateTime end = At(_sessionDate, Config.WorkEnd);
-				_today.OvertimeSeconds = Math.Max(0.0, (clockOut - end).TotalSeconds);
-			}
-			double regularSeconds = Math.Max(0.0, _today.OvertimeSeconds - _today.EmergencyCallSeconds);
-			_today.OvertimeLoss = OvertimeLossFor(regularSeconds, holiday) + _today.EmergencyCallLoss;
+			RecomputeSettled(_today, _sessionDate);
 		}
 		if (Config.SalaryMode == SalaryMode.Hourly)
 		{
@@ -3194,7 +3352,6 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
 			else if (_emergencyOptions.Mode == EmergencyCallCompensationMode.HourlyRate)
 			{
 				_aggregate.EmergencyCallEarned += EmergencyEarnedLive;
-				_aggregate.TotalIncome += EmergencyEarnedLive;
 			}
 		}
 		Slices.Clear();
@@ -3951,7 +4108,15 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
 			SettingsMessage = "❌ 薪资金额必须大于 0。";
 			return;
 		}
-		if (!TryParseTime(Config.WorkStart, out var value) || !TryParseTime(Config.WorkEnd, out var value2))
+		var draftsUnchanged = SettingsWorkStart == _initialWorkStart &&
+			SettingsWorkEnd == _initialWorkEnd &&
+			SettingsLunchStart == _initialLunchStart &&
+			SettingsLunchEnd == _initialLunchEnd;
+		var workStartText = draftsUnchanged ? Config.WorkStart : SettingsWorkStart;
+		var workEndText = draftsUnchanged ? Config.WorkEnd : SettingsWorkEnd;
+		var lunchStartText = draftsUnchanged ? Config.LunchStart : SettingsLunchStart;
+		var lunchEndText = draftsUnchanged ? Config.LunchEnd : SettingsLunchEnd;
+		if (!TryParseTime(workStartText, out var value) || !TryParseTime(workEndText, out var value2))
 		{
 			SettingsMessage = "❌ 上下班时间格式应为 HH:mm，例如 09:00。";
 			return;
@@ -3961,7 +4126,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
 			SettingsMessage = "❌ 下班时间必须晚于上班时间。";
 			return;
 		}
-		if (!TryParseTime(Config.LunchStart, out var value3) || !TryParseTime(Config.LunchEnd, out var value4) || value4 < value3)
+		if (!TryParseTime(lunchStartText, out var value3) || !TryParseTime(lunchEndText, out var value4) || value4 < value3)
 		{
 			SettingsMessage = "❌ 午休起止时间有误，且结束时间不能早于开始时间（相等表示没有午休）。";
 			return;
@@ -3995,6 +4160,18 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
 		Config.WorkEnd = $"{value2.Hours:00}:{value2.Minutes:00}";
 		Config.LunchStart = $"{value3.Hours:00}:{value3.Minutes:00}";
 		Config.LunchEnd = $"{value4.Hours:00}:{value4.Minutes:00}";
+		_settingsWorkStart = Config.WorkStart;
+		_settingsWorkEnd = Config.WorkEnd;
+		_settingsLunchStart = Config.LunchStart;
+		_settingsLunchEnd = Config.LunchEnd;
+		_initialWorkStart = Config.WorkStart;
+		_initialWorkEnd = Config.WorkEnd;
+		_initialLunchStart = Config.LunchStart;
+		_initialLunchEnd = Config.LunchEnd;
+		OnPropertyChanged("SettingsWorkStart");
+		OnPropertyChanged("SettingsWorkEnd");
+		OnPropertyChanged("SettingsLunchStart");
+		OnPropertyChanged("SettingsLunchEnd");
 		Config.StandardHours = Config.ComputedStandardHours;
 		if (!_storage.SaveConfig(Config))
 		{
@@ -4010,14 +4187,25 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
 		UpdateSettingsPreview();
 		RaiseAll();
 		ReportNeeded?.Invoke();
-		if (Config.JoinLeaderboard) JoinLeaderboardRequested?.Invoke();
-	}
+			if (Config.JoinLeaderboard) JoinLeaderboardRequested?.Invoke();
+}
 
 	public void SaveSalaryOnly()
 	{
 		if (Config.SalaryAmount <= 0m)
 		{
 			SettingsMessage = "❌ 薪资金额必须大于 0。";
+			return;
+		}
+		if (!TryParseTime(Config.WorkStart, out var workStart) ||
+			!TryParseTime(Config.WorkEnd, out var workEnd) ||
+			workEnd <= workStart ||
+			!TryParseTime(Config.LunchStart, out var lunchStart) ||
+			!TryParseTime(Config.LunchEnd, out var lunchEnd) ||
+			lunchEnd < lunchStart ||
+			Config.WorkDays.Count == 0)
+		{
+			SettingsMessage = "❌ 排班时间或工作日不合法，薪资尚未保存。";
 			return;
 		}
 		if (!_storage.SaveConfig(Config))
@@ -4040,51 +4228,18 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
 		int changed = 0;
 		foreach (DailyRecord record in _ledger.Records)
 		{
-			if (!DateTime.TryParseExact(record.Date, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var date))
+			if (!DateTime.TryParseExact(record.Date, "yyyy-MM-dd", CultureInfo.InvariantCulture,
+					DateTimeStyles.None, out var date))
 			{
 				continue;
 			}
-			bool holiday = record.HolidayOvertime;
-			double seconds = record.OvertimeSeconds;
-			if (seconds <= 0.01 && record.ClockOutAt is DateTime clockOut)
-			{
-				if (record.HolidayOvertime && record.HolidayOvertimeStart is DateTime holidayStart)
-				{
-					seconds = Math.Max(0.0, (clockOut - holidayStart).TotalSeconds);
-				}
-				else if (Config.IsWorkday(date))
-				{
-					DateTime end = At(date, Config.WorkEnd);
-					if (clockOut > end)
-					{
-						seconds = (clockOut - end).TotalSeconds;
-					}
-				}
-			}
-			EnsureEmergencySessions(record);
-			double emergencySeconds = record.EmergencyCallSessions.Sum((EmergencyCallSession s) => Math.Max(0.0, s.Seconds));
-			if (seconds < emergencySeconds)
-			{
-				seconds = emergencySeconds;
-			}
-			if (seconds <= 0.01)
-			{
-				continue;
-			}
-			if (record.OvertimeSeconds != seconds)
-			{
-				record.OvertimeSeconds = seconds;
-			}
-			double regularSeconds = Math.Max(0.0, seconds - emergencySeconds);
-			decimal emergencyLoss = EmergencyLossFromSessions(record, date);
-			decimal newLoss = OvertimeLossFor(regularSeconds, holiday) + emergencyLoss;
-			bool isChanged = record.OvertimeLoss != newLoss || record.EmergencyCallLoss != emergencyLoss || record.EmergencyCallSeconds != emergencySeconds;
-			record.OvertimeLoss = newLoss;
-			record.EmergencyCallLoss = emergencyLoss;
-			record.EmergencyCallSeconds = emergencySeconds;
-			record.EmergencyCallEarned = record.EmergencyCallSessions.Sum((EmergencyCallSession s) => s.Earned);
-			record.EmergencyCallCount = record.EmergencyCallSessions.Count;
-			if (isChanged)
+			double oldOvertime = record.OvertimeSeconds;
+			decimal oldLoss = record.OvertimeLoss;
+			decimal oldEmergencyLoss = record.EmergencyCallLoss;
+			RecomputeSettled(record, date);
+			if (Math.Abs(record.OvertimeSeconds - oldOvertime) > 0.01 ||
+				record.OvertimeLoss != oldLoss ||
+				record.EmergencyCallLoss != oldEmergencyLoss)
 			{
 				changed++;
 			}

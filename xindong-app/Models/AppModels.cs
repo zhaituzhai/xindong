@@ -646,6 +646,9 @@ public sealed class DailyRecord
     /// <summary>撤回下班后排除的不计薪空档秒数；持久化后重启仍不会被补算。</summary>
     public double WallClockExcludedSeconds { get; set; }
 
+    /// <summary>撤回下班产生的普通加班空档秒数，不能计入义务加班。</summary>
+    public double OvertimeExcludedSeconds { get; set; }
+
     /// <summary>摸鱼累计秒数。</summary>
     public double SlackingSeconds { get; set; }
 
@@ -662,6 +665,9 @@ public sealed class DailyRecord
 
     /// <summary>当天是否为节假日 / 休息日。</summary>
     public bool IsHoliday { get; set; }
+
+    /// <summary>中途开启「今日休假」的时间点；取消休假时用于排除整段空档。</summary>
+    public DateTime? TodayOffStartedAt { get; set; }
 
     /// <summary>当天是否已确认下班。</summary>
     public bool IsOffDuty { get; set; }
@@ -687,7 +693,7 @@ public sealed class DailyRecord
             if (!HasEmergencyCall) return string.Empty;
 
             var duration = TimeSpan.FromSeconds(Math.Max(0, EmergencyCallSeconds));
-            var text = $"[夺命Call] {duration:hh\\:mm\\:ss}";
+            var text = $"[夺命Call] {(int)duration.TotalHours:00}:{duration.Minutes:00}:{duration.Seconds:00}";
             if (EmergencyCallEarned > 0m) text += $" · +¥{EmergencyCallEarned:F2}";
             if (EmergencyCallLoss > 0m) text += $" · -¥{EmergencyCallLoss:F2}";
             if (EmergencyCallActive) text += " · 进行中";
@@ -697,6 +703,9 @@ public sealed class DailyRecord
 
     /// <summary>确认下班的时间点；用于事后按当前薪资重算加班与抹零。</summary>
     public DateTime? ClockOutAt { get; set; }
+
+    /// <summary>第一次正常下班时间；接完夺命 Call 后仍保留，用于计算普通加班空档。</summary>
+    public DateTime? RegularClockOutAt { get; set; }
 
     /// <summary>当天是否启动过「节假日被迫义务加班」。</summary>
     public bool HolidayOvertime { get; set; }

@@ -163,6 +163,14 @@ if (-not $ready) {
 
 Write-Step '服务已就绪：http://127.0.0.1:8770'
 Write-Step 'Swagger：http://127.0.0.1:8770/docs'
+$lanIp = Get-NetIPConfiguration -ErrorAction SilentlyContinue |
+    Where-Object { $_.IPv4DefaultGateway -and $_.IPv4Address } |
+    ForEach-Object { $_.IPv4Address.IPAddress } |
+    Select-Object -First 1
+if ($lanIp) {
+    Write-Step "局域网客户端地址：http://${lanIp}:8770"
+    Write-Step '朋友电脑必须和这台电脑在同一局域网，防火墙需放行 TCP 8770。'
+}
 
 Start-Panel $pythonw
 

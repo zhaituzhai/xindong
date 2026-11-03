@@ -15,6 +15,44 @@ pip install -r requirements.txt
 
 ## 二、启动后台
 
+### 一键启动（推荐）
+
+双击：
+
+```text
+start-xindong-server.bat
+```
+
+或中文名：
+
+```text
+一键启动后台.bat
+```
+
+脚本会自动：
+
+- 优先使用 `..\..\XinDong-Server-Env` 里的 Python；
+- 没有环境时创建 `.venv` 并安装 `requirements.txt`；
+- 在后台隐藏启动 FastAPI 服务；
+- 等待 `/health` 通过；
+- 启动管理面板并打开 Swagger。
+
+关闭启动窗口不会停止后台服务。
+
+停止后台：
+
+```text
+stop-xindong-server.bat
+```
+
+或：
+
+```text
+一键停止后台.bat
+```
+
+### 手动启动
+
 ```bat
 python -m app.main
 ```
